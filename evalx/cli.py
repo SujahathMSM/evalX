@@ -28,9 +28,14 @@ def run(
         help="LiteLLM judge model, e.g. 'anthropic/claude-haiku-5-5'. "
         "Skips judge scoring when omitted. Needs the provider API key in env.",
     ),
+    judge_temperature: float = typer.Option(
+        None,
+        help="Temperature for the judge. Omitted by default: some models only "
+        "accept their own default temperature.",
+    ),
 ) -> None:
     """Run a golden dataset against a target app and print the scores."""
-    judge = LLMJudge(judge_model) if judge_model else None
+    judge = LLMJudge(judge_model, temperature=judge_temperature) if judge_model else None
     result = run_suite(suite, target, judge=judge)
 
     table = Table(title=f"evalx run: {result.target} on {result.suite}")

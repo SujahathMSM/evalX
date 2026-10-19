@@ -5,7 +5,9 @@ Bias guards (built in, not optional):
    no position bias.
 2. The system prompt states that brevity is fine and fluff scores nothing,
    guarding against verbosity bias.
-3. temperature=0 for determinism.
+3. Temperature is omitted by default: some models (e.g. claude-haiku-5-5 via
+   LiteLLM) reject any temperature but their own default, so we don't send
+   the parameter unless explicitly requested.
 4. The verdict is parsed as JSON and validated with Pydantic; malformed
    output is retried once, then raises instead of silently inventing a score.
 """
@@ -53,21 +55,23 @@ class LLMJudge:
     must be in the environment (e.g. ANTHROPIC_API_KEY).
     """
 
-    def __init__(self, model: str, temperature: float = 0.0, max_retries: int = 1):
+    def __init__(self, model: str, temperature: float | None = None, max_retries: int = 1):
         self.model = model
         self.temperature = temperature
         self.max_retries = max_retries
 
     def _call(self, prompt: str) -> str:
-        response = litellm.completion(
-            model=self.model,
-            messages=[
+        kwargs: dict = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            temperature=self.temperature,
-            response_format={"type": "json_object"},
-        )
+            "response_format": {"type": "json_object"},
+        }
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
+        response = litellm.completion(**kwargs)
         return response.choices[0].message.content or ""
 
     def score(self, case: TestCase, answer: str) -> JudgeVerdict:

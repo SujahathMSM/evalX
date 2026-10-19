@@ -36,10 +36,20 @@ class _FakeResponse:
 
 
 def _completion_ok(**kwargs):
-    assert kwargs["temperature"] == 0.0
+    assert "temperature" not in kwargs  # omitted by default; some models reject it
     assert kwargs["response_format"] == {"type": "json_object"}
     assert kwargs["model"] == "anthropic/claude-haiku-5-5"
     return _FakeResponse('{"score": 0.75, "reason": "names the cause, briefly"}')
+
+
+def test_explicit_temperature_is_passed_through(monkeypatch):
+    def _check_temp(**kwargs):
+        assert kwargs["temperature"] == 0.5
+        return _FakeResponse('{"score": 1.0, "reason": "ok"}')
+
+    monkeypatch.setattr("evalx.judge.litellm.completion", _check_temp)
+    verdict = LLMJudge("some-model", temperature=0.5).score(make_case(), "x")
+    assert verdict.score == 1.0
 
 
 def test_judge_scores_answer(monkeypatch):
