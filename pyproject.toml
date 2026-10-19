@@ -1,0 +1,26 @@
+[project]
+name = "evalx"
+version = "0.1.0"
+description = "Eval harness for LLM apps: golden datasets, code + LLM-judge scoring, regression tracking, CI gates."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "typer>=0.9",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+evalx = "evalx.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"

@@ -1,0 +1,47 @@
+# Demo golden dataset: 6 hand-written cases (2 easy, 2 medium, 2 adversarial).
+# The demo app passes the easy ones, gets partial credit on medium,
+# and hallucinates on the adversarial ones -- watch the harness catch it.
+
+- id: q001
+  question: "What was the company's revenue in 2024?"
+  checks:
+    - {type: contains, expected: "$4.2M"}
+  tags: [finance, numeric]
+  difficulty: easy
+
+- id: q002
+  question: "Who is the CEO?"
+  checks:
+    - {type: exact_match, expected: "The CEO is Jane Doe."}
+  tags: [factual]
+  difficulty: easy
+
+- id: q003
+  question: "Why did operating costs rise in Q3?"
+  checks:
+    - {type: contains, expected: "warehouse", weight: 1.0}
+    - {type: contains, expected: "supply chain", weight: 1.0}
+  tags: [finance, reasoning]
+  difficulty: medium
+
+- id: q004
+  question: "What did the CEO say about the Mars expansion?"
+  checks:
+    - {type: regex, expected: "(?i)no information|don't know|not in"}
+  tags: [adversarial]
+  difficulty: hard
+
+- id: q005
+  question: "What is the revenue forecast for Q4?"
+  checks:
+    - {type: regex, expected: "(?i)no information|don't know|not in|forecast is not"}
+  tags: [adversarial]
+  difficulty: hard
+
+- id: q006
+  question: "Compare 2024 revenue to 2023."
+  checks:
+    - {type: contains, expected: "$4.2M", weight: 1.0}
+    - {type: contains, expected: "$3.8M", weight: 1.0}
+  tags: [finance, numeric, reasoning]
+  difficulty: medium
