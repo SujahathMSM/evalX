@@ -21,6 +21,9 @@
   checks:
     - {type: contains, expected: "warehouse", weight: 1.0}
     - {type: contains, expected: "supply chain", weight: 1.0}
+  judge:
+    rubric: "Does the answer explain WHY costs rose, naming the warehouse expansion as the primary cause? 1.0 = names warehouse expansion and the mechanism; 0.5 = mentions supply chain only; 0.0 = unrelated or invented."
+    weight: 1.0
   tags: [finance, reasoning]
   difficulty: medium
 
@@ -43,5 +46,8 @@
   checks:
     - {type: contains, expected: "$4.2M", weight: 1.0}
     - {type: contains, expected: "$3.8M", weight: 1.0}
+  judge:
+    rubric: "Does the answer give BOTH figures ($4.2M for 2024, $3.8M for 2023) and state the direction of change? 1.0 = both figures with comparison; 0.5 = one figure only; 0.0 = no figures or invented numbers."
+    weight: 1.0
   tags: [finance, numeric, reasoning]
   difficulty: medium

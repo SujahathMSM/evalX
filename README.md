@@ -20,19 +20,35 @@ evalx run --suite datasets/demo/v1 --target examples.demo_app:answer --fail-unde
 # exits 1: mean 0.500 < gate 0.8
 ```
 
-## What's here (Milestone 1)
+## What's here (Milestones 1 + 2)
 
-- `evalx/schemas.py` — Pydantic models: `TestCase`, `Check`, `CaseResult`, `RunResult`
+- `evalx/schemas.py` — Pydantic models: `TestCase`, `Check`, `JudgeSpec`,
+  `CaseResult`, `RunResult`
 - `evalx/datasets.py` — load + validate golden datasets from YAML
 - `evalx/scorers.py` — deterministic scorers: `exact_match`, `contains`, `regex`
+- `evalx/judge.py` — LLM-as-judge via LiteLLM with built-in bias guards:
+  answers scored alone (no position bias), anti-fluff system prompt
+  (no verbosity bias), temperature=0, JSON verdicts validated with Pydantic
+  (retry once, then raise instead of inventing a score)
 - `evalx/adapters.py` — resolve `module:attr` targets to question → answer callables
-- `evalx/runner.py` — run every case, score, aggregate
-- `evalx/cli.py` — `evalx run` with a Rich table and `--fail-under` gate
-- `datasets/demo/v1/cases.yaml` — 6 hand-written golden cases
+- `evalx/runner.py` — run every case, combine code checks + judge by weight
+- `evalx/cli.py` — `evalx run` with a Rich table, `--fail-under` gate,
+  and `--judge-model` (e.g. `anthropic/claude-haiku-5-5`)
+- `datasets/demo/v1/cases.yaml` — 6 hand-written golden cases (2 with rubrics)
 - `examples/demo_app.py` — deliberately mediocre demo target
+
+## Judge usage
+
+```bash
+export ANTHROPIC_API_KEY=...   # or the key for your judge provider
+evalx run --suite datasets/demo/v1 --target examples.demo_app:answer \
+  --judge-model anthropic/claude-haiku-5-5
+```
+
+Only cases with a `judge:` rubric invoke the judge; the rest use code checks.
+Two judged cases on Haiku cost a fraction of a cent.
 
 ## Roadmap
 
-- M2: LLM-as-judge scorer with rubrics and bias guards
 - M3: DuckDB run store, `evalx compare`, score trends
 - M4: Streamlit dashboard + GitHub Actions gate

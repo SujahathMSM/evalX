@@ -9,7 +9,11 @@ dependencies = [
     "typer>=0.9",
     "rich>=13.0",
     "pyyaml>=6.0",
+    "litellm>=1.0",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
 
 [project.scripts]
 evalx = "evalx.cli:app"
