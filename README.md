@@ -48,7 +48,21 @@ evalx run --suite datasets/demo/v1 --target examples.demo_app:answer \
 Only cases with a `judge:` rubric invoke the judge; the rest use code checks.
 Two judged cases on Haiku cost a fraction of a cent.
 
+## Run store & comparison (Milestone 3)
+
+Every `evalx run` is saved to `.evalx/runs.duckdb` (override with `EVALX_STORE`):
+
+```bash
+evalx run --suite datasets/demo/v1 --target examples.demo_app:answer
+# Run saved: 20261019-143022
+
+evalx runs                 # list stored runs, newest first
+evalx compare latest-1 latest   # per-case delta table + mean change
+```
+
+Run references accept a full id, a unique prefix, `latest`, or `latest-N`.
+`--no-save` skips storing a throwaway run.
+
 ## Roadmap
 
-- M3: DuckDB run store, `evalx compare`, score trends
 - M4: Streamlit dashboard + GitHub Actions gate

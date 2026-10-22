@@ -54,3 +54,4 @@ class RunResult(BaseModel):
     n_cases: int
     mean_score: float
     results: list[CaseResult]
+    run_id: str | None = None  # assigned when the run is saved to the store
