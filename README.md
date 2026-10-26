@@ -20,6 +20,68 @@ evalx run --suite datasets/demo/v1 --target examples.demo_app:answer --fail-unde
 # exits 1: mean 0.500 < gate 0.8
 ```
 
+## How it works
+
+One command runs the whole pipeline — load the exam, ask your app, grade every
+answer, remember the run:
+
+```mermaid
+flowchart LR
+    subgraph S1["📥 PHASE 1 · SETUP"]
+        direction TB
+        CLI(["⚡ evalx run — you type the command"])
+        PARSE["cli.py — flags → arguments; judge built only if asked"]
+        LOAD["datasets.py — YAML → TestCases, Pydantic-validated"]
+        RESOLVE["adapters.py — module:attr → real function"]
+        CLI --> PARSE
+        PARSE --> LOAD
+        PARSE --> RESOLVE
+    end
+    subgraph S2["🔁 PHASE 2 · THE LOOP — repeats per case"]
+        direction TB
+        ASK["Ask the app — answer = answer_fn(question), timed"]
+        CODE["Code checks — scorers.py: exact · contains · regex"]
+        RUBRIC{"rubric?"}
+        LLM["LLM judge — judge.py → LiteLLM, JSON verdict validated"]
+        SKIP["judge skipped"]
+        BLEND["Blend by weight — _combine_score"]
+        CASE["CaseResult — score · latency · reason"]
+        ASK --> CODE
+        ASK --> RUBRIC
+        RUBRIC -->|yes| LLM
+        RUBRIC -->|no| SKIP
+        CODE --> BLEND
+        LLM --> BLEND
+        SKIP --> BLEND
+        BLEND --> CASE
+        CASE -.->|"↺ next case"| ASK
+    end
+    subgraph S3["📤 PHASE 3 · REPORT + MEMORY"]
+        direction TB
+        MEAN["RunResult — mean of all case scores"]
+        SAVE[("store.py — DuckDB .evalx/runs.duckdb")]
+        TABLE["Report — Rich table; gate → exit 0 / 1"]
+        CMP["evalx compare — latest-1 vs latest, per-case deltas"]
+        MEAN --> SAVE
+        MEAN --> TABLE
+        SAVE -.-> CMP
+    end
+    LOAD --> ASK
+    RESOLVE --> ASK
+    CASE --> MEAN
+
+    classDef input fill:#16283f,stroke:#3b82f6,stroke-width:2px,color:#e6e9f0;
+    classDef exec fill:#14301f,stroke:#22c55e,stroke-width:2px,color:#e6e9f0;
+    classDef score fill:#2a2145,stroke:#a78bfa,stroke-width:2px,color:#e6e9f0;
+    classDef judge fill:#3a2a10,stroke:#f59e0b,stroke-width:2px,color:#e6e9f0;
+    classDef out fill:#12303d,stroke:#38bdf8,stroke-width:2px,color:#e6e9f0;
+    class CLI,PARSE,LOAD,RESOLVE input;
+    class ASK,CASE exec;
+    class CODE,BLEND,SKIP score;
+    class RUBRIC,LLM judge;
+    class MEAN,SAVE,TABLE,CMP out;
+```
+
 ## What's here (Milestones 1 + 2)
 
 - `evalx/schemas.py` — Pydantic models: `TestCase`, `Check`, `JudgeSpec`,
