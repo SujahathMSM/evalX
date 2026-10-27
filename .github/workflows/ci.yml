@@ -1,0 +1,28 @@
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Tests
+        run: python -m pytest -q
+
+      - name: Eval gate (demo suite)
+        # The demo app scores a mean of 0.500; the gate fails the build if a
+        # change ever drags it below 0.4. Point --suite at your real dataset
+        # to gate what actually matters.
+        run: evalx run --suite datasets/demo/v1 --target examples.demo_app:answer --fail-under 0.4 --no-save

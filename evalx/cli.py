@@ -69,6 +69,40 @@ def compare(
 
 
 @app.command()
+def dashboard(
+    port: int = typer.Option(8501, help="Port for the Streamlit dashboard server."),
+) -> None:
+    """Open the evalX run-history dashboard in your browser."""
+    try:
+        import streamlit  # noqa: F401
+    except ImportError:
+        console.print('[red]streamlit is not installed. Run: pip install -e ".[dev]"[/red]')
+        raise typer.Exit(code=1)
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    import evalx.dashboard as dashboard_mod
+
+    url = f"http://localhost:{port}"
+    console.print(f"Starting evalX dashboard at [cyan]{url}[/cyan] ...")
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "streamlit",
+            "run",
+            str(Path(dashboard_mod.__file__)),
+            "--server.port",
+            str(port),
+            "--server.headless",
+            "true",
+        ],
+        check=False,
+    )
+
+
+@app.command()
 def run(
     suite: str = typer.Option(..., help="Dataset directory or cases.yaml file."),
     target: str = typer.Option(..., help="App under test as 'module:attr'."),

@@ -146,6 +146,20 @@ def load_case_scores(run_id: str, path: Path | None = None) -> dict[str, float]:
     return {case_id: score for case_id, score in rows}
 
 
+def load_case_details(run_id: str, path: Path | None = None) -> list[dict]:
+    """Per-case score, judge score and latency for one run, in stored order."""
+    con = _connect(path)
+    try:
+        rows = con.execute(
+            "SELECT case_id, score, judge_score, latency_ms FROM case_results WHERE run_id = ?",
+            [run_id],
+        ).fetchall()
+    finally:
+        con.close()
+    cols = ["case_id", "score", "judge_score", "latency_ms"]
+    return [dict(zip(cols, row)) for row in rows]
+
+
 class CaseDelta(BaseModel):
     case_id: str
     score_a: float

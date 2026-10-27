@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff"]
+dev = ["pytest", "ruff", "streamlit", "pandas"]
 
 [project.scripts]
 evalx = "evalx.cli:app"
