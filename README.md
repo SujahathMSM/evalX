@@ -1,6 +1,14 @@
 # evalx
 
+[![ci](https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg)](https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml)
+
 Eval harness for LLM apps — golden datasets, code + LLM-judge scoring, regression tracking, and CI gates. pytest for AI behavior.
+
+**Local-first by design.** Every run lives in a single DuckDB file inside your
+repo — no account, no cloud, no telemetry. Your eval history sits next to your
+code, and the whole loop works offline with a local judge model. promptfoo is
+a platform; evalx is the 10-minute, local-first regression catcher for Python
+LLM apps.
 
 ## Quickstart
 
@@ -82,7 +90,7 @@ flowchart LR
     class MEAN,SAVE,TABLE,CMP out;
 ```
 
-## What's here (Milestones 1 + 2)
+## What's here
 
 - `evalx/schemas.py` — Pydantic models: `TestCase`, `Check`, `JudgeSpec`,
   `CaseResult`, `RunResult`
@@ -90,12 +98,21 @@ flowchart LR
 - `evalx/scorers.py` — deterministic scorers: `exact_match`, `contains`, `regex`
 - `evalx/judge.py` — LLM-as-judge via LiteLLM with built-in bias guards:
   answers scored alone (no position bias), anti-fluff system prompt
-  (no verbosity bias), temperature=0, JSON verdicts validated with Pydantic
-  (retry once, then raise instead of inventing a score)
+  (no verbosity bias), JSON verdicts validated with Pydantic (retry once,
+  then raise instead of inventing a score), temperature optional — some
+  models (e.g. claude-haiku-5-5) reject a forced temperature, so the
+  parameter is omitted unless you set it
 - `evalx/adapters.py` — resolve `module:attr` targets to question → answer callables
 - `evalx/runner.py` — run every case, combine code checks + judge by weight
-- `evalx/cli.py` — `evalx run` with a Rich table, `--fail-under` gate,
-  and `--judge-model` (e.g. `anthropic/claude-haiku-5-5`)
+- `evalx/store.py` — DuckDB run store: save runs, list them, resolve
+  `latest` / `latest-N` / id-prefix references, compare two runs per case
+- `evalx/cli.py` — `evalx run` (Rich table, `--fail-under` gate,
+  `--judge-model`, e.g. `anthropic/claude-haiku-5-5`), `evalx runs`,
+  `evalx compare`, `evalx dashboard`
+- `evalx/dashboard.py` — Streamlit dashboard: run history, per-run detail,
+  run-over-run compare
+- `.github/workflows/ci.yml` — CI on every push: lint, tests, and the demo
+  suite gated at `--fail-under 0.4`
 - `datasets/demo/v1/cases.yaml` — 6 hand-written golden cases (2 with rubrics)
 - `examples/demo_app.py` — deliberately mediocre demo target
 
@@ -110,7 +127,7 @@ evalx run --suite datasets/demo/v1 --target examples.demo_app:answer \
 Only cases with a `judge:` rubric invoke the judge; the rest use code checks.
 Two judged cases on Haiku cost a fraction of a cent.
 
-## Run store & comparison (Milestone 3)
+## Run store & comparison
 
 Every `evalx run` is saved to `.evalx/runs.duckdb` (override with `EVALX_STORE`):
 
@@ -125,6 +142,24 @@ evalx compare latest-1 latest   # per-case delta table + mean change
 Run references accept a full id, a unique prefix, `latest`, or `latest-N`.
 `--no-save` skips storing a throwaway run.
 
+## Dashboard
+
+```bash
+evalx dashboard            # http://localhost:8501  (add --port N if busy)
+```
+
+Three tabs over your stored runs: **Runs** (history table + mean-score trend
+line), **Run detail** (per-case scores for one run), and **Compare** (pick a
+baseline and a challenger — per-case deltas with ▲/▼ markers). Needs the dev
+extras: `pip install -e ".[dev]"`.
+
 ## Roadmap
 
-- M4: Streamlit dashboard + GitHub Actions gate
+- **M5 — per-case regression gate:** pin a baseline run (`evalx baseline`)
+  and fail CI when *any single case* drops past a threshold
+  (`--fail-on-regression 0.2`), even if the mean improved — mean gates hide
+  single-case craters.
+- **Quality-vs-cost compare:** judge token cost and latency deltas next to
+  score deltas in `evalx compare`.
+- **Dogfooding:** a 25–30 case dataset grading a real RAG app, with the
+  results published here.
