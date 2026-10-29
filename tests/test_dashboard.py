@@ -7,6 +7,7 @@ needing a browser or the real Streamlit package.
 
 import sys
 
+import pandas as pd
 import pytest
 
 from evalx import dashboard, store
@@ -107,6 +108,10 @@ class _FakeSt:
         self.calls = []
 
     def __getattr__(self, name):
+        if name == "sidebar":
+            self.calls.append(name)
+            return _FakeCtx(_FakeSt())
+
         def _rec(*args, **kwargs):
             self.calls.append(name)
             if name == "tabs":
@@ -132,8 +137,10 @@ def test_main_renders_with_runs(isolated_store, monkeypatch):
     store.save_run(_fake_result([0.0, 1.0]))
     fake = _install_fake_streamlit(monkeypatch)
     dashboard.main()  # must not raise
-    for call in ("set_page_config", "title", "tabs", "dataframe", "bar_chart", "line_chart"):
+    for call in ("set_page_config", "title", "tabs", "dataframe", "altair_chart", "metric"):
         assert call in fake.calls
+    assert "bar_chart" not in fake.calls
+    assert "line_chart" not in fake.calls
 
 
 def test_main_empty_store(isolated_store, monkeypatch):
@@ -141,3 +148,54 @@ def test_main_empty_store(isolated_store, monkeypatch):
     dashboard.main()
     assert "info" in fake.calls
     assert "tabs" not in fake.calls
+
+
+def test_runs_frame_delta_prev(isolated_store):
+    store.save_run(_fake_result([0.0]))
+    store.save_run(_fake_result([1.0]))
+    df = dashboard.runs_frame()
+    assert df["delta_prev"].iloc[0] == 1.0
+    assert pd.isna(df["delta_prev"].iloc[1])  # pandas stores the None as NaN
+
+
+def test_score_band():
+    assert dashboard.score_band(1.0) == "pass"
+    assert dashboard.score_band(0.99) == "pass"
+    assert dashboard.score_band(0.5) == "partial"
+    assert dashboard.score_band(0.49) == "fail"
+    assert dashboard.score_band(0.0) == "fail"
+
+
+def test_case_detail_helper(isolated_store):
+    run_id = store.save_run(_fake_result([0.5]))
+    detail = dashboard.case_detail(run_id, "q000")
+    assert detail["question"] == "?"
+    assert detail["answer"] == "a"
+    assert detail["checks"] == []
+    assert dashboard.case_detail(run_id, "nope") is None
+
+
+def test_biggest_movers(isolated_store):
+    store.save_run(_fake_result([1.0, 0.0]))
+    store.save_run(_fake_result([0.5, 1.0]))
+    movers = dashboard.biggest_movers("latest-1", "latest")
+    assert movers["improved"].case_id == "q001"
+    assert movers["improved"].delta == pytest.approx(1.0)
+    assert movers["regressed"].case_id == "q000"
+    assert movers["regressed"].delta == pytest.approx(-0.5)
+
+
+def test_biggest_movers_none_when_identical(isolated_store):
+    run_id = store.save_run(_fake_result([1.0, 0.5]))
+    movers = dashboard.biggest_movers(run_id, run_id)
+    assert movers == {"improved": None, "regressed": None}
+
+
+def test_charts_build(isolated_store):
+    store.save_run(_fake_result([1.0, 0.5]))
+    store.save_run(_fake_result([0.5, 1.0]))
+    assert dashboard.trend_chart(dashboard.runs_frame()) is not None
+    run_id = store.resolve_run_id("latest")
+    assert dashboard.score_chart(dashboard.case_scores_frame(run_id)) is not None
+    df, _summary = dashboard.comparison_frame("latest-1", "latest")
+    assert dashboard.delta_chart(df) is not None

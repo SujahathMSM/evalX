@@ -2,7 +2,7 @@
 
 import re
 
-from evalx.schemas import Check, TestCase
+from evalx.schemas import Check, CheckScore, TestCase
 
 
 def _exact_match(check: Check, answer: str) -> float:
@@ -37,3 +37,11 @@ def score_case(case: TestCase, answer: str) -> tuple[float, list[float]]:
     total_weight = sum(c.weight for c in case.checks)
     score = sum(s * c.weight for s, c in zip(per_check, case.checks)) / total_weight
     return score, per_check
+
+
+def score_case_details(case: TestCase, answer: str) -> list[CheckScore]:
+    """Per-check detail for the record: what was expected and how it scored."""
+    return [
+        CheckScore(type=c.type, expected=c.expected, weight=c.weight, score=score_check(c, answer))
+        for c in case.checks
+    ]

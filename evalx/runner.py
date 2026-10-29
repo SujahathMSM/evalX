@@ -6,7 +6,7 @@ from pathlib import Path
 from evalx.adapters import resolve_target
 from evalx.datasets import load_dataset
 from evalx.schemas import CaseResult, RunResult, TestCase
-from evalx.scorers import score_case
+from evalx.scorers import score_case, score_case_details
 
 
 def _combine_score(case: TestCase, code_score: float, judge_score: float | None) -> float:
@@ -51,6 +51,7 @@ def run_suite(suite: str | Path, target: str, judge=None) -> RunResult:
                 question=case.question,
                 answer=answer,
                 check_scores=per_check,
+                checks=score_case_details(case, answer),
                 judge_score=judge_score,
                 judge_reason=judge_reason,
                 score=_combine_score(case, code_score, judge_score),

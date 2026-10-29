@@ -4,6 +4,7 @@ Location defaults to ``.evalx/runs.duckdb`` in the working directory and can
 be overridden with the ``EVALX_STORE`` environment variable.
 """
 
+import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -40,9 +41,18 @@ CREATE TABLE IF NOT EXISTS case_results (
     case_id VARCHAR,
     score DOUBLE,
     judge_score DOUBLE,
-    latency_ms DOUBLE
+    latency_ms DOUBLE,
+    question VARCHAR,
+    answer VARCHAR,
+    judge_reason VARCHAR,
+    checks_json VARCHAR
 )
 """
+
+# Detail columns added after the first store release. Fresh databases get
+# them from the schema above; older files are migrated in _connect. Rows
+# saved before the migration hold NULL here, which readers surface as None.
+_CASE_DETAIL_COLUMNS = ("question", "answer", "judge_reason", "checks_json")
 
 
 def _connect(path: Path | None = None):
@@ -51,6 +61,8 @@ def _connect(path: Path | None = None):
     con = duckdb.connect(str(path))
     con.execute(_SCHEMA_RUNS)
     con.execute(_SCHEMA_CASES)
+    for col in _CASE_DETAIL_COLUMNS:
+        con.execute(f"ALTER TABLE case_results ADD COLUMN IF NOT EXISTS {col} VARCHAR")
     return con
 
 
@@ -73,8 +85,21 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
             [run_id, result.suite, result.target, judge_model, result.mean_score, result.n_cases],
         )
         con.executemany(
-            "INSERT INTO case_results VALUES (?, ?, ?, ?, ?)",
-            [(run_id, r.case_id, r.score, r.judge_score, r.latency_ms) for r in result.results],
+            "INSERT INTO case_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    run_id,
+                    r.case_id,
+                    r.score,
+                    r.judge_score,
+                    r.latency_ms,
+                    r.question,
+                    r.answer,
+                    r.judge_reason,
+                    json.dumps([c.model_dump() for c in r.checks]),
+                )
+                for r in result.results
+            ],
         )
     finally:
         con.close()
@@ -147,17 +172,27 @@ def load_case_scores(run_id: str, path: Path | None = None) -> dict[str, float]:
 
 
 def load_case_details(run_id: str, path: Path | None = None) -> list[dict]:
-    """Per-case score, judge score and latency for one run, in stored order."""
+    """Per-case detail for one run, in stored order.
+
+    ``question``, ``answer``, ``judge_reason`` and ``checks`` are None for
+    runs saved before the store kept case detail (see _CASE_DETAIL_COLUMNS).
+    """
     con = _connect(path)
     try:
         rows = con.execute(
-            "SELECT case_id, score, judge_score, latency_ms FROM case_results WHERE run_id = ?",
+            "SELECT case_id, score, judge_score, latency_ms, question, answer,"
+            " judge_reason, checks_json FROM case_results WHERE run_id = ?",
             [run_id],
         ).fetchall()
     finally:
         con.close()
-    cols = ["case_id", "score", "judge_score", "latency_ms"]
-    return [dict(zip(cols, row)) for row in rows]
+    cols = ["case_id", "score", "judge_score", "latency_ms", "question", "answer", "judge_reason"]
+    details = []
+    for row in rows:
+        detail = dict(zip(cols, row[:7]))
+        detail["checks"] = json.loads(row[7]) if row[7] else None
+        details.append(detail)
+    return details
 
 
 class CaseDelta(BaseModel):

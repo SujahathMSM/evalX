@@ -1,7 +1,7 @@
 """Tests for the code-based scorers."""
 
 from evalx.schemas import Check, TestCase
-from evalx.scorers import score_case, score_check
+from evalx.scorers import score_case, score_case_details, score_check
 
 
 def test_exact_match():
@@ -42,3 +42,19 @@ def test_no_checks_scores_zero():
     score, per_check = score_case(case, "anything")
     assert score == 0.0
     assert per_check == []
+
+
+def test_score_case_details():
+    case = TestCase(
+        id="q",
+        question="?",
+        checks=[
+            Check(type="contains", expected="warehouse", weight=1.0),
+            Check(type="contains", expected="supply chain", weight=2.0),
+        ],
+    )
+    details = score_case_details(case, "supply chain issues")
+    assert [(d.type, d.expected, d.weight, d.score) for d in details] == [
+        ("contains", "warehouse", 1.0, 0.0),
+        ("contains", "supply chain", 2.0, 1.0),
+    ]

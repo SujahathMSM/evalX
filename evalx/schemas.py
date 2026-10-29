@@ -33,6 +33,15 @@ class TestCase(BaseModel):
     difficulty: Literal["easy", "medium", "hard"] = "medium"
 
 
+class CheckScore(BaseModel):
+    """One check's outcome on one answer, with the expectation it graded."""
+
+    type: str
+    expected: str
+    weight: float
+    score: float
+
+
 class CaseResult(BaseModel):
     """What happened when one case ran."""
 
@@ -40,6 +49,7 @@ class CaseResult(BaseModel):
     question: str
     answer: str
     check_scores: list[float]
+    checks: list[CheckScore] = []
     judge_score: float | None = None
     judge_reason: str | None = None
     score: float

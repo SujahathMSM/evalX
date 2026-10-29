@@ -119,3 +119,71 @@ def test_store_path_env_override(tmp_path, monkeypatch):
     monkeypatch.setenv("EVALX_STORE", str(custom))
     store.save_run(_fake_result([1.0]))
     assert custom.exists()
+
+
+def test_case_details_full_roundtrip(isolated_store):
+    result = run_suite(DEMO, TARGET)
+    run_id = store.save_run(result)
+    details = {d["case_id"]: d for d in store.load_case_details(run_id)}
+    q003 = details["q003"]
+    assert q003["question"] == "Why did operating costs rise in Q3?"
+    assert "supply chain" in q003["answer"]
+    assert [c["expected"] for c in q003["checks"]] == ["warehouse", "supply chain"]
+    assert [c["score"] for c in q003["checks"]] == [0.0, 1.0]
+    assert details["q001"]["judge_reason"] is None
+
+
+def test_case_details_judge_reason_roundtrip(isolated_store):
+    result = RunResult(
+        suite="s",
+        target="t",
+        n_cases=1,
+        mean_score=0.5,
+        results=[
+            CaseResult(
+                case_id="q1",
+                question="?",
+                answer="a",
+                check_scores=[],
+                judge_score=0.5,
+                judge_reason="partial: named one cause",
+                score=0.5,
+                latency_ms=3.0,
+            )
+        ],
+    )
+    run_id = store.save_run(result, judge_model="m")
+    (detail,) = store.load_case_details(run_id)
+    assert detail["judge_reason"] == "partial: named one cause"
+    assert detail["judge_score"] == 0.5
+
+
+def test_store_migrates_old_schema(isolated_store):
+    import duckdb
+
+    path = store.store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    con = duckdb.connect(str(path))
+    con.execute(
+        "CREATE TABLE runs (run_id VARCHAR PRIMARY KEY, suite VARCHAR, target VARCHAR,"
+        " judge_model VARCHAR, mean_score DOUBLE, n_cases INTEGER,"
+        " created_at TIMESTAMP DEFAULT now())"
+    )
+    con.execute(
+        "CREATE TABLE case_results (run_id VARCHAR, case_id VARCHAR, score DOUBLE,"
+        " judge_score DOUBLE, latency_ms DOUBLE)"
+    )
+    con.execute("INSERT INTO runs VALUES ('old-run', 's', 't', NULL, 0.5, 1, now())")
+    con.execute("INSERT INTO case_results VALUES ('old-run', 'q001', 1.0, NULL, 1.0)")
+    con.close()
+
+    # Opening the old file through the store migrates it in place.
+    assert store.list_runs()[0]["run_id"] == "old-run"
+    (detail,) = store.load_case_details("old-run")
+    assert detail["score"] == 1.0
+    assert detail["question"] is None
+    assert detail["checks"] is None
+
+    new_id = store.save_run(_fake_result([1.0]))
+    (new_detail,) = store.load_case_details(new_id)
+    assert new_detail["question"] == "?"
