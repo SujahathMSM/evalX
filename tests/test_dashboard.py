@@ -6,6 +6,7 @@ needing a browser or the real Streamlit package.
 """
 
 import sys
+import time
 
 import pandas as pd
 import pytest
@@ -19,7 +20,7 @@ def isolated_store(tmp_path, monkeypatch):
     monkeypatch.setenv("EVALX_STORE", str(tmp_path / "runs.duckdb"))
 
 
-def _fake_result(scores: list[float]) -> RunResult:
+def _fake_result(scores: list[float], prefix: str = "q") -> RunResult:
     return RunResult(
         suite="s",
         target="t",
@@ -27,7 +28,7 @@ def _fake_result(scores: list[float]) -> RunResult:
         mean_score=sum(scores) / len(scores),
         results=[
             CaseResult(
-                case_id=f"q{i:03d}",
+                case_id=f"{prefix}{i:03d}",
                 question="?",
                 answer="a",
                 check_scores=[s],
@@ -85,6 +86,25 @@ def test_comparison_frame_bad_ref(isolated_store):
         dashboard.comparison_frame("latest", "nope")
 
 
+def test_comparison_frame_no_shared_cases(isolated_store):
+    # Two runs from different suites (demo ids vs aerointel-style ids)
+    # share no case ids: the frame must be empty but still carry its
+    # columns -- without them delta_chart died with KeyError: 'delta'.
+    store.save_run(_fake_result([1.0, 0.5]))
+    store.save_run(_fake_result([0.0, 1.0], prefix="a"))
+    df, summary = dashboard.comparison_frame("latest-1", "latest")
+    assert df.empty
+    assert list(df.columns) == ["case_id", "score_a", "score_b", "delta", "trend"]
+    assert (summary["improved"], summary["regressed"], summary["unchanged"]) == (0, 0, 0)
+
+
+def test_delta_chart_empty_comparison(isolated_store):
+    store.save_run(_fake_result([1.0]))
+    store.save_run(_fake_result([0.0], prefix="a"))
+    df, _summary = dashboard.comparison_frame("latest-1", "latest")
+    assert dashboard.delta_chart(df) is not None
+
+
 class _FakeCtx:
     def __init__(self, fake):
         self._fake = fake
@@ -117,7 +137,8 @@ class _FakeSt:
             if name == "tabs":
                 return [_FakeCtx(_FakeSt()) for _ in args[0]]
             if name == "selectbox":
-                return args[1][0]
+                # honour the caller's default index, like real streamlit
+                return args[1][kwargs.get("index", 0) or 0]
             if name == "columns":
                 # real streamlit columns double as context managers
                 return [_FakeCtx(_FakeSt()) for _ in range(args[0])]
@@ -148,6 +169,20 @@ def test_main_empty_store(isolated_store, monkeypatch):
     dashboard.main()
     assert "info" in fake.calls
     assert "tabs" not in fake.calls
+
+
+def test_main_renders_with_disjoint_runs(isolated_store, monkeypatch):
+    # The Compare tab defaults to newest vs second-newest; when those are
+    # runs from different suites it must show the "share no cases" info
+    # instead of crashing in delta_chart (the KeyError: 'delta' bug).
+    # The sleep keeps the two run ids in different seconds: same-second
+    # ids are prefixes of each other, which resolve_run_id calls ambiguous.
+    store.save_run(_fake_result([1.0, 0.5]))
+    time.sleep(1.1)
+    store.save_run(_fake_result([0.0, 1.0], prefix="a"))
+    fake = _install_fake_streamlit(monkeypatch)
+    dashboard.main()  # must not raise
+    assert "info" in fake.calls
 
 
 def test_runs_frame_delta_prev(isolated_store):

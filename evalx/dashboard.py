@@ -76,7 +76,11 @@ def comparison_frame(ref_a: str, ref_b: str, path=None) -> tuple[pd.DataFrame, d
                 "trend": "▲" if c.delta > _EPS else "▼" if c.delta < -_EPS else "–",
             }
             for c in comp.cases
-        ]
+        ],
+        # columns= matters: two runs from different suites share no case
+        # ids, and an empty frame built without it has no columns at all --
+        # delta_chart then died with KeyError: 'delta'.
+        columns=["case_id", "score_a", "score_b", "delta", "trend"],
     )
     summary = {
         "run_a": comp.run_a,
@@ -295,20 +299,26 @@ def main() -> None:
         )
         m2.metric("Improved", s["improved"])
         m3.metric("Regressed", s["regressed"])
-        if movers["improved"] is not None:
-            st.success(
-                f"Biggest improvement: {movers['improved'].case_id} "
-                f"({movers['improved'].delta:+.2f})"
+        if df.empty:
+            st.info(
+                "These two runs share no cases, so there is nothing to compare "
+                "case-by-case. Pick two runs from the same suite."
             )
-        if movers["regressed"] is not None:
-            st.error(
-                f"Biggest regression: {movers['regressed'].case_id} "
-                f"({movers['regressed'].delta:+.2f})"
-            )
-        if movers["improved"] is None and movers["regressed"] is None:
-            st.info("No movers — every case scored the same in both runs.")
-        st.altair_chart(delta_chart(df))
-        st.dataframe(styled_comparison(df), width="stretch")
+        else:
+            if movers["improved"] is not None:
+                st.success(
+                    f"Biggest improvement: {movers['improved'].case_id} "
+                    f"({movers['improved'].delta:+.2f})"
+                )
+            if movers["regressed"] is not None:
+                st.error(
+                    f"Biggest regression: {movers['regressed'].case_id} "
+                    f"({movers['regressed'].delta:+.2f})"
+                )
+            if movers["improved"] is None and movers["regressed"] is None:
+                st.info("No movers — every case scored the same in both runs.")
+            st.altair_chart(delta_chart(df))
+            st.dataframe(styled_comparison(df), width="stretch")
 
 
 if __name__ == "__main__":

@@ -153,6 +153,17 @@ line), **Run detail** (per-case scores for one run), and **Compare** (pick a
 baseline and a challenger — per-case deltas with ▲/▼ markers). Needs the dev
 extras: `pip install -e ".[dev]"`.
 
+![Run detail for the AeroIntel dogfood run: 67 cases, mean 0.737, judged by claude-haiku-5-5](docs/dashboard.png)
+
+*Run detail — the AeroIntel dogfood run below: 67 cases (35 answerable, 32
+must-refuse) graded by code checks + an LLM judge, mean 0.737.*
+
+![Case drill-down: a must-refuse question, AeroIntel's refusal answer, and the regex check that graded it](docs/drill-down.png)
+
+*Case drill-down — the stored question, the app's actual answer (here a
+refusal, returned verbatim by the adapter), and the per-check scores behind
+the final grade.*
+
 ## Roadmap
 
 - **M5 — per-case regression gate:** pin a baseline run (`evalx baseline`)
@@ -161,5 +172,9 @@ extras: `pip install -e ".[dev]"`.
   single-case craters.
 - **Quality-vs-cost compare:** judge token cost and latency deltas next to
   score deltas in `evalx compare`.
-- **Dogfooding:** a 25–30 case dataset grading a real RAG app, with the
-  results published here.
+- **Dogfooding — done:** evalx graded AeroIntel, a local
+  aviation-maintenance RAG, on a 67-case dataset built from its own golden
+  set (35 answerable + 32 must-refuse): mean **0.737** with an LLM judge,
+  with 31 of 32 must-refuse questions refused correctly. Dataset in
+  `datasets/aerointel/v1`, adapter in `examples/aerointel_app.py`,
+  screenshots in the Dashboard section above.

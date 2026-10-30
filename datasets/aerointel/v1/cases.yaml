@@ -1,0 +1,764 @@
+# AeroIntel dogfood dataset: evalx grading the AeroIntel RAG end to end.
+# Converted 2026-10-29 from evals/golden_faa.json in the aerointel repo
+# (FAA AC 43.13-1B). Conversion rules:
+# - answerable: one `contains` check per golden fact; cases with 2+ facts
+#   also get a judge rubric quoting every fact (paraphrase insurance).
+# - off_topic -> refusal cases: one regex matching the service's four real
+#   refusal wordings (distance gate, unknown terms, not-in-context,
+#   unverified numbers). difficulty: generic=easy, outside=medium,
+#   near_topic=hard.
+# Regenerate from the golden file rather than hand-editing single cases.
+- id: cable-critical-fatigue-area
+  question: How is a critical fatigue area defined for aircraft control cables?
+  checks:
+  - type: contains
+    expected: runs over, under, or around a pulley
+  - type: contains
+    expected: within 1 foot of a swaged-on fitting
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) runs over, under, or around a pulley; (2) within 1 foot of a swaged-on fitting. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: cable-broken-wire-check
+  question: How do I find broken wires in a control cable during an inspection?
+  checks:
+  - type: contains
+    expected: passing a cloth over the area
+  - type: contains
+    expected: magnifying glass of 7 power
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) passing a cloth over the area; (2) magnifying glass of 7 power. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: cable-kink-popped-core
+  question: When must a kinked control cable or one with a popped core be replaced?
+  checks:
+  - type: contains
+    expected: in a kinked cable, strands and wires are out of position
+  - type: contains
+    expected: replace any cable that has a popped core
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) in a kinked cable, strands and wires are out of position; (2) replace any cable that has a popped core. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: cable-wear-limit
+  question: How much can the outer wires of a control cable wear before the cable has to be replaced?
+  checks:
+  - type: contains
+    expected: 40 to 50 percent
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: cable-proof-load
+  question: What proof load is used to test cable terminals and splices before installation?
+  checks:
+  - type: contains
+    expected: 60 percent of the cable breaking strengths
+  - type: contains
+    expected: 3 minutes
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) 60 percent of the cable breaking strengths; (2) 3 minutes. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: rivet-edge-distance
+  question: What is the minimum edge distance and spacing for a single row of rivets?
+  checks:
+  - type: contains
+    expected: not be less than 2 times the diameter
+  - type: contains
+    expected: 3 times the diameter
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) not be less than 2 times the diameter; (2) 3 times the diameter. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: plywood-scarf-slope
+  question: What slope is the steepest allowed for a scarf patch in a plywood skin?
+  checks:
+  - type: contains
+    expected: scarf slope of 1 in 12
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: safety-wire-diameter
+  question: What diameter of safety wire should I use with the double-twist method on parts with large holes?
+  checks:
+  - type: contains
+    expected: .032-inch minimum diameter wire
+  - type: contains
+    expected: larger than .045 inch
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) .032-inch minimum diameter wire; (2) larger than .045 inch. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: turnbuckle-exposed-threads
+  question: After safetying a turnbuckle, how many threads of the terminal may still show?
+  checks:
+  - type: contains
+    expected: no more than three threads
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: bond-resistance
+  question: What resistance must the electrical bond between a piece of equipment and the aircraft structure have?
+  checks:
+  - type: contains
+    expected: less than 2.5 milliohms
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: galvanic-corrosion
+  question: What is galvanic corrosion and how can I recognise it?
+  checks:
+  - type: contains
+    expected: two dissimilar metals make contact
+  - type: contains
+    expected: buildup of corrosion at the joint
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) two dissimilar metals make contact; (2) buildup of corrosion at the joint. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: exfoliation-corrosion
+  question: What does exfoliation corrosion look like and where does it usually show up?
+  checks:
+  - type: contains
+    expected: lifting up the surface grains
+  - type: contains
+    expected: extruded sections
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) lifting up the surface grains; (2) extruded sections. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: titanium-oxide-colours
+  question: Why does heated titanium change colour, and should the coloured film be removed?
+  checks:
+  - type: contains
+    expected: blue oxide coating
+  - type: contains
+    expected: should not be removed
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) blue oxide coating; (2) should not be removed. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: default-torque-table
+  question: Which torque values do I use for nuts and bolts when the manufacturer gives none?
+  checks:
+  - type: contains
+    expected: when specific torque is not supplied by the manufacturer
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: unvented-fuel-cap
+  question: What goes wrong if a vented fuel tank cap is replaced with an unvented one?
+  checks:
+  - type: contains
+    expected: fuel starvation
+  - type: contains
+    expected: collapse of the fuel tank
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) fuel starvation; (2) collapse of the fuel tank. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: weld-metal-fuel-tank
+  question: Can a metal fuel tank be welded or soldered, and what has to be done first?
+  checks:
+  - type: contains
+    expected: must not be welded or soldered
+  - type: contains
+    expected: adequately purged
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) must not be welded or soldered; (2) adequately purged. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: wire-support-spacing
+  question: How far apart can clamps be when supporting wires and cables in an aircraft?
+  checks:
+  - type: contains
+    expected: not more than 24 inches
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: tire-inflation-gas
+  question: Which gas is recommended for inflating aircraft tires, and which must never be used?
+  checks:
+  - type: contains
+    expected: use of nitrogen to inflate tires is recommended
+  - type: contains
+    expected: do not use oxygen to inflate tires
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) use of nitrogen to inflate tires is recommended; (2) do not use oxygen to inflate tires. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: lead-acid-nicad-storage
+  question: Why is it dangerous to service lead-acid and nickel-cadmium batteries in the same area?
+  checks:
+  - type: contains
+    expected: extremely dangerous to store or service lead-acid and nicad batteries
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: magnetic-particle-materials
+  question: Which materials can be checked with magnetic particle inspection?
+  checks:
+  - type: contains
+    expected: ferromagnetic materials (iron and steel)
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: fabric-punch-tester
+  question: How reliable is a mechanical punch tester for judging the condition of aircraft fabric?
+  checks:
+  - type: contains
+    expected: punch test accuracy will depend
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: gas-cylinder-securing
+  question: How should oxygen and fuel gas cylinders be secured in a welding area?
+  checks:
+  - type: contains
+    expected: secure oxygen and fuel gas cylinders
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: blasting-dwell-time
+  question: How long may an abrasive blast stream stay on one spot of an aluminium skin?
+  checks:
+  - type: contains
+    expected: longer than 15 seconds
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: empty-weight-cg
+  question: What is the empty weight center of gravity of an aircraft?
+  checks:
+  - type: contains
+    expected: the empty weight center of gravity (ewcg) is the cg of an aircraft
+  tags:
+  - aerointel
+  - answerable
+  difficulty: easy
+- id: user-approved-data-conditions
+  question: What conditions must be met for AC 43.13-1B repair data to be used as FAA-approved data for a repair to a nonpressurized area of a civil aircraft?
+  checks:
+  - type: contains
+    expected: appropriate to the product being repaired
+  - type: contains
+    expected: directly applicable to the repair being made
+  - type: contains
+    expected: not contrary to manufacturer
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) appropriate to the product being repaired; (2) directly applicable to the repair being made; (3) not contrary to manufacturer. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-manufacturer-instructions-first
+  question: When does the circular require a mechanic to follow the manufacturer’s maintenance manual or instructions for continued airworthiness instead of using its general methods?
+  checks:
+  - type: contains
+    expected: unless the repair at issue is recommended against in the applicable manufacturer
+  - type: contains
+    expected: prescribed in the current manufacturer’s maintenance manual or instructions for continued airworthiness
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) unless the repair at issue is recommended against in the applicable manufacturer; (2) prescribed in the current manufacturer’s maintenance manual or instructions for continued airworthiness. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-ndi-crack-methods
+  question: What inspection methods does the circular describe for finding cracks in metal structures, and what are the limitations of each?
+  checks:
+  - type: contains
+    expected: surface discontinuities only
+  - type: contains
+    expected: electrically conductive materials
+  - type: contains
+    expected: depth of discontinuity not indicated
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) surface discontinuities only; (2) electrically conductive materials; (3) depth of discontinuity not indicated. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-rivet-size-spacing
+  question: How should a mechanic determine rivet size, spacing, and edge distance when making a sheet-metal repair?
+  checks:
+  - type: contains
+    expected: rivet spacing and edge distance should duplicate
+  - type: contains
+    expected: approximately three times the thickness
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) rivet spacing and edge distance should duplicate; (2) approximately three times the thickness. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-corrosion-repair-replace
+  question: What practices does the circular recommend for repairing corrosion damage, and when should a damaged part be replaced?
+  checks:
+  - type: contains
+    expected: removal of all corrosion and corrosion products
+  - type: contains
+    expected: exceeds the damage limits set by the aircraft or parts manufacturer, the part must be replaced
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) removal of all corrosion and corrosion products; (2) exceeds the damage limits set by the aircraft or parts manufacturer, the part must be replaced. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-drilling-deburring
+  question: What precautions does it give for drilling, cutting, and deburring aircraft sheet metal?
+  checks:
+  - type: contains
+    expected: deburr the hole with an oversize drill
+  - type: contains
+    expected: drill relief holes
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) deburr the hole with an oversize drill; (2) drill relief holes. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-bolts-nuts-safetying
+  question: How does the circular describe selecting and installing bolts, nuts, and safety devices?
+  checks:
+  - type: contains
+    expected: except self-locking nuts
+  - type: contains
+    expected: do not reuse cotter pins or safety wire
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) except self-locking nuts; (2) do not reuse cotter pins or safety wire. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-wood-inspection-scarf
+  question: What does it recommend for inspecting and repairing wooden aircraft structures, including splices or scarf joints?
+  checks:
+  - type: contains
+    expected: the scarf joint is the most satisfactory method of making an end joint
+  - type: contains
+    expected: a spar may be spliced at any point except under the wing attachment fittings
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) the scarf joint is the most satisfactory method of making an end joint; (2) a spar may be spliced at any point except under the wing attachment fittings. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-fabric-inspect-repair
+  question: What procedures does it describe for inspecting, preserving, or repairing fabric-covered aircraft surfaces?
+  checks:
+  - type: contains
+    expected: less than 70 percent of the strength of new fabric
+  - type: contains
+    expected: of a quality at least equal to the original materials
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) less than 70 percent of the strength of new fabric; (2) of a quality at least equal to the original materials. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-wiring-inspect-repair
+  question: What guidance does it give for inspecting and repairing aircraft electrical wiring and connections?
+  checks:
+  - type: contains
+    expected: subjected to chafing or fraying
+  - type: contains
+    expected: self-insulated splice connector is preferred
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) subjected to chafing or fraying; (2) self-insulated splice connector is preferred. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: user-transparent-plastics
+  question: What does it recommend for inspecting and repairing transparent plastic aircraft components, such as windows or windshields?
+  checks:
+  - type: contains
+    expected: rather than repair extensively damaged transparent plastic
+  - type: contains
+    expected: at the extreme ends of the cracks
+  judge:
+    rubric: 'The manual (FAA AC 43.13-1B) states these facts: (1) rather than repair extensively damaged transparent plastic; (2) at the extreme ends of the cracks. Score 1.0 if the answer conveys ALL of them, 0.5 if it conveys only some, 0.0 if it conveys none or invents figures the manual does not contain.'
+    weight: 1.0
+  tags:
+  - aerointel
+  - answerable
+  difficulty: medium
+- id: capital-of-france
+  question: what is the capital of France?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - generic
+  difficulty: easy
+- id: chocolate-cake
+  question: give me a recipe for a chocolate cake
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - generic
+  difficulty: easy
+- id: kubernetes-ingress
+  question: how do I configure an ingress controller in Kubernetes?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - generic
+  difficulty: easy
+- id: a320-max-takeoff-weight
+  question: What is the maximum takeoff weight of an Airbus A320?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - outside
+  difficulty: medium
+- id: b737-jacking
+  question: How do I jack up a Boeing 737 to change a main wheel?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - outside
+  difficulty: medium
+- id: g1000-flight-plan
+  question: How do I load a flight plan into a Garmin G1000?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - outside
+  difficulty: medium
+- id: mel-dispatch
+  question: What are the rules for dispatching with an inoperative item under the minimum equipment list?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - outside
+  difficulty: medium
+- id: ge90-fan-blades
+  question: How do I replace the fan blades on a GE90 turbofan engine?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - outside
+  difficulty: medium
+- id: outflow-valve
+  question: How is a cabin pressurization outflow valve adjusted on an airliner?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - outside
+  difficulty: medium
+- id: carbon-propeller-repair
+  question: How do I repair a carbon fiber propeller blade?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: helicopter-rotor-bolt
+  question: What torque applies to a helicopter main rotor blade bolt?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: spark-plug-gap
+  question: What gap should the electrodes of an aircraft spark plug be set to?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: tire-pressure-value
+  question: What pressure should the main landing gear tires of a light aircraft be inflated to?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: strut-nitrogen-pressure
+  question: What nitrogen pressure should a nose gear shock strut be serviced to?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: aileron-cable-tension
+  question: What tension should the aileron control cables be rigged to?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: elt-battery-hours
+  question: After how many hours of cumulative use must an ELT battery be replaced?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: lycoming-o360-tbo
+  question: What is the time between overhaul for a Lycoming O-360 engine?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: magneto-rpm-drop
+  question: What is the maximum RPM drop allowed when checking each magneto during the engine run-up?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: fixed-pitch-static-rpm
+  question: What static RPM should a fixed-pitch propeller reach during a ground run-up?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: brake-disk-runout
+  question: What is the maximum allowable runout of a brake disk?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: deicer-boot-pressure
+  question: What air pressure inflates the rubber deicer boots on a wing leading edge?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: prepreg-freezer-life
+  question: How many months can prepreg fabric be stored in a freezer before it expires?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: epoxy-glass-transition
+  question: What is the glass transition temperature of a typical epoxy laminating resin?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: spar-cap-pitting-limit
+  question: How deep may corrosion pitting be on a wing spar cap before the spar must be replaced?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: seat-belt-age
+  question: After how many years must aircraft seat belts be replaced?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: fire-bottle-cartridge
+  question: How often must the discharge cartridge on an engine fire extinguisher bottle be replaced?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: oil-change-interval
+  question: How many flight hours are allowed between oil changes on a piston aircraft engine?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: compressor-blade-dent
+  question: What is the maximum dent depth allowed on a turbine engine compressor blade?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: user-carbon-panel-delamination
+  question: What procedure does it give for repairing a delamination in a specific modern carbon-fiber aircraft panel?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: user-specific-spar-crack
+  question: What is the approved repair for a cracked wing spar on a particular aircraft, given its make, model, serial number, and damage location?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: user-specific-fastener-torque
+  question: What exact torque value should be used for a particular fastener in a specific aircraft installation?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
+- id: user-ad-compliance
+  question: Does the circular address whether a proposed repair complies with the latest airworthiness directive or other current requirement for a particular aircraft?
+  checks:
+  - type: regex
+    expected: (?i)refusing to answer|no answer was generated|was withheld|none of the stored documents contain|no chunk in the database
+  tags:
+  - aerointel
+  - refusal
+  - near_topic
+  difficulty: hard
