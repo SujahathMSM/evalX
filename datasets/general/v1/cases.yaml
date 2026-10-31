@@ -1,0 +1,53 @@
+# General smoke dataset: 6 cases for any bare LLM reached through the
+# OpenAI-compatible adapter (examples/openai_compatible_app.py). The facts
+# are stable general knowledge, so the same suite grades an Ollama model
+# today and a hosted model tomorrow -- compare the runs, not just the
+# scores. This is a smoke suite (is the plumbing honest, does the model
+# follow instructions at all); an app-specific suite like
+# datasets/aerointel/v1 is what grades a real application.
+
+- id: geo-capital-france
+  question: "What is the capital of France?"
+  checks:
+    - {type: contains, expected: "Paris"}
+  tags: [general, factual]
+  difficulty: easy
+
+- id: math-multiply
+  question: "What is 17 multiplied by 6?"
+  checks:
+    - {type: contains, expected: "102"}
+  tags: [general, numeric]
+  difficulty: easy
+
+- id: science-water-formula
+  question: "What is the chemical formula for water?"
+  checks:
+    - {type: contains, expected: "H2O"}
+  tags: [general, factual]
+  difficulty: easy
+
+- id: history-ww2-end
+  question: "In what year did World War II end?"
+  checks:
+    - {type: contains, expected: "1945"}
+  tags: [general, factual]
+  difficulty: medium
+
+- id: instruction-one-word
+  question: "Reply with exactly one word, in lowercase, and nothing else: the yellow fruit that monkeys are famous for eating."
+  checks:
+    - {type: exact_match, expected: "banana"}
+  tags: [instruction-following]
+  difficulty: hard
+
+- id: explain-photosynthesis
+  question: "Explain photosynthesis in two or three sentences."
+  checks:
+    - {type: contains, expected: "sunlight", weight: 1.0}
+    - {type: contains, expected: "oxygen", weight: 1.0}
+  judge:
+    rubric: "Does the answer explain photosynthesis: plants use sunlight, water and carbon dioxide to make glucose (food/energy) and release oxygen? 1.0 = the full process with inputs and outputs; 0.5 = partially right (mentions sunlight making food but misses inputs or oxygen); 0.0 = wrong, off-topic, or invented facts."
+    weight: 1.0
+  tags: [general, reasoning]
+  difficulty: medium
