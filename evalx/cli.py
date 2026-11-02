@@ -10,6 +10,7 @@ from evalx.runner import run_suite
 from evalx.store import (
     StoreError,
     compare_runs,
+    judged_case_ids,
     list_baselines,
     list_runs,
     load_run_meta,
@@ -29,10 +30,13 @@ app.add_typer(baseline_app, name="baseline")
 def baseline_pin(
     ref: str = typer.Argument(..., help="Run id, prefix, 'latest' or 'latest-N'."),
     name: str = typer.Option("stable", help="Baseline name to pin (re-pinning moves it)."),
+    allow_errors: bool = typer.Option(
+        False, help="Pin even if the run has error cases (refused by default)."
+    ),
 ) -> None:
     """Pin a stored run as a named baseline for the regression gate."""
     try:
-        baseline = pin_baseline(name, ref)
+        baseline = pin_baseline(name, ref, allow_errors=allow_errors)
     except StoreError as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
@@ -73,6 +77,15 @@ def version() -> None:
     console.print(__version__)
 
 
+def _count_cell(value: int | None, highlight: bool = False) -> str:
+    """A stored per-run count: NULL (run saved before counts existed) is unknown."""
+    if value is None:
+        return "–"
+    if highlight and value > 0:
+        return f"[bold red]{value}[/bold red]"
+    return str(value)
+
+
 @app.command(name="runs")
 def list_runs_cmd() -> None:
     """List stored runs, newest first."""
@@ -85,6 +98,8 @@ def list_runs_cmd() -> None:
     table.add_column("suite")
     table.add_column("mean", justify="right")
     table.add_column("cases", justify="right")
+    table.add_column("Errors", justify="right")
+    table.add_column("Skipped", justify="right")
     table.add_column("created")
     for r in runs:
         table.add_row(
@@ -92,6 +107,8 @@ def list_runs_cmd() -> None:
             r["suite"],
             f"{r['mean_score']:.3f}",
             str(r["n_cases"]),
+            _count_cell(r["n_errors"], highlight=True),
+            _count_cell(r["n_skipped"]),
             str(r["created_at"]),
         )
     console.print(table)
@@ -161,6 +178,11 @@ def run(
     suite: str = typer.Option(..., help="Dataset directory or cases.yaml file."),
     target: str = typer.Option(..., help="App under test as 'module:attr'."),
     fail_under: float = typer.Option(0.0, help="Exit 1 if mean score is below this."),
+    max_error_rate: float = typer.Option(
+        0.0,
+        help="Infra gate: exit 1 if the fraction of graded cases that errored "
+        "(target or judge raised) exceeds this.",
+    ),
     judge_model: str = typer.Option(
         None,
         help="LiteLLM judge model, e.g. 'anthropic/claude-haiku-5-5'. "
@@ -213,6 +235,16 @@ def run(
     console.print(f"\nMean score: [bold]{result.mean_score:.3f}[/bold] over {result.n_cases} cases")
 
     failed = False
+    n_graded = len(result.results)
+    n_errors = sum(1 for r in result.results if r.error is not None)
+    error_rate = n_errors / n_graded if n_graded else 0.0
+    if error_rate > max_error_rate:
+        console.print(
+            f"[red]INFRA FAIL: {n_errors}/{n_graded} cases errored "
+            f"(rate {error_rate:.2f} > allowed {max_error_rate:.2f})[/red]"
+        )
+        failed = True
+
     if result.mean_score < fail_under:
         console.print(f"[red]FAIL: mean {result.mean_score:.3f} < gate {fail_under}[/red]")
         failed = True
@@ -247,6 +279,13 @@ def run(
             console.print(
                 f"  [yellow]note: {case_id} is in the baseline but not in this run — ignored[/yellow]"
             )
+        if judge is None and report.removed:
+            n_judged = len(judged_case_ids(report.baseline_run_id) & set(report.removed))
+            if n_judged:
+                console.print(
+                    f"  [yellow]note: baseline was judged, this run is unjudged: {n_judged} "
+                    "case(s) that have judge scores in the baseline were not compared[/yellow]"
+                )
         if report.passed:
             console.print("[green]No case regressed past the threshold.[/green]")
         else:

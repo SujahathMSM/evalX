@@ -174,6 +174,13 @@ happened; if the baseline came from a differently-named suite, the shared
 cases are still compared, with a warning. Baselines live in the local run
 store, so a CI gate needs a store that contains the pin.
 
+A run with error cases (the target or judge raised) is refused as a
+baseline unless you pass `--allow-errors`: a baseline built on an outage
+would hide every later regression. To keep an outage from passing as a
+quality drop in the first place, `evalx run --max-error-rate` (default 0.0)
+adds an infra gate that fails the run on its fraction of errored cases,
+reported before the score gates.
+
 ## Dashboard
 
 ```bash
