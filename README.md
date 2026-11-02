@@ -189,18 +189,29 @@ must-refuse) graded by code checks + an LLM judge, mean 0.737.*
 refusal, returned verbatim by the adapter), and the per-check scores behind
 the final grade.*
 
-## Roadmap
+## Milestones
 
-- **M5 — per-case regression gate — done:** pin a baseline run and fail
-  when *any single case* drops past a threshold, even if the mean improved
-  — mean gates hide single-case craters. Includes a guard against
-  baselines from a different dataset. See "Baselines & the regression
-  gate" above.
-- **Quality-vs-cost compare:** judge token cost and latency deltas next to
-  score deltas in `evalx compare`.
-- **Dogfooding — done:** evalx graded AeroIntel, a local
-  aviation-maintenance RAG, on a 67-case dataset built from its own golden
-  set (35 answerable + 32 must-refuse): mean **0.737** with an LLM judge,
-  with 31 of 32 must-refuse questions refused correctly. Dataset in
+- **M1 — core harness:** YAML golden datasets, code scorers
+  (exact / contains / regex), runner, CLI with a mean-score gate.
+- **M2 — LLM-as-judge:** rubric scoring through LiteLLM with bias guards —
+  Pydantic-validated JSON verdicts, retry once, never an invented score.
+- **M3 — run store & compare:** every run saved to a local DuckDB file;
+  per-case deltas between any two runs.
+- **M4 — dashboard + CI:** Streamlit dashboard over the stored runs
+  (history, case drill-down, compare); GitHub Actions runs lint, tests,
+  and the eval gate on every push.
+- **M5 — baselines & regression gate:** pin a run and fail when *any
+  single case* drops past a threshold, even if the mean improved — with a
+  guard against baselines from a different dataset. See "Baselines & the
+  regression gate" above.
+- **Dogfooding:** evalx graded AeroIntel, a local aviation-maintenance
+  RAG, on a 67-case dataset built from its own golden set (35 answerable +
+  32 must-refuse): mean **0.737** with an LLM judge, with 31 of 32
+  must-refuse questions refused correctly. Dataset in
   `datasets/aerointel/v1`, adapter in `examples/aerointel_app.py`,
   screenshots in the Dashboard section above.
+
+## Roadmap
+
+- **Quality-vs-cost compare:** judge token cost and latency deltas next to
+  score deltas in `evalx compare`.
