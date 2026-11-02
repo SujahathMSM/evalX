@@ -316,3 +316,58 @@ def test_cli_run_regression_gate_passes_against_itself(isolated_store):
     )
     assert res.exit_code == 0
     assert "No case regressed" in res.output
+
+
+# --- M5 guard: a baseline only makes sense against the same dataset --------
+
+
+def test_regression_no_shared_cases_raises(isolated_store):
+    store.save_run(_fake_result([1.0, 1.0]))
+    store.pin_baseline("stable", "latest")
+    with pytest.raises(store.StoreError, match="share no cases"):
+        store.regression_against_baseline("stable", {"x1": 1.0, "x2": 0.0}, threshold=0.2)
+
+
+def test_regression_partial_overlap_does_not_raise(isolated_store):
+    store.save_run(_fake_result([1.0, 1.0, 1.0]))
+    store.pin_baseline("stable", "latest")
+    report = store.regression_against_baseline(
+        "stable", {"q1": 1.0, "q9": 0.0}, threshold=0.2
+    )
+    assert report.passed
+    assert report.added == ["q9"]
+    assert report.removed == ["q0", "q2"]
+
+
+def test_cli_run_baseline_from_another_dataset_fails(isolated_store):
+    store.save_run(_perfect_demo_result())
+    store.pin_baseline("stable", "latest")
+    res = CliRunner().invoke(
+        app,
+        [
+            "run",
+            "--suite",
+            "datasets/general/v1",
+            "--target",
+            TARGET,
+            "--baseline",
+            "stable",
+            "--no-save",
+        ],
+    )
+    assert res.exit_code == 1
+    assert "share no cases" in res.output
+
+
+def test_cli_run_baseline_suite_mismatch_warns_but_passes(isolated_store):
+    result = run_suite(DEMO, TARGET)
+    renamed = result.model_copy(update={"suite": "datasets/renamed/v1"})
+    store.save_run(renamed)
+    store.pin_baseline("stable", "latest")
+    res = CliRunner().invoke(
+        app,
+        ["run", "--suite", DEMO, "--target", TARGET, "--baseline", "stable", "--no-save"],
+    )
+    assert res.exit_code == 0
+    assert "came from suite datasets/renamed/v1" in res.output
+    assert "No case regressed" in res.output

@@ -354,7 +354,10 @@ def regression_against_baseline(
     A case regresses when its score dropped by MORE than ``threshold``
     (a drop of exactly the threshold still passes). Cases that exist on
     only one side are reported as added/removed and never fail the gate:
-    a changed dataset is a warning, not a regression.
+    a changed dataset is a warning, not a regression. But if the two runs
+    share NO cases at all, the comparison itself is meaningless (almost
+    certainly the wrong baseline), so StoreError is raised instead of
+    reporting a pass.
     """
     baseline = get_baseline(name, path)
     if baseline is None:
@@ -362,6 +365,16 @@ def regression_against_baseline(
             f"no baseline named {name!r}; pin one first: evalx baseline pin latest --name {name}"
         )
     baseline_scores = load_case_scores(baseline["run_id"], path)
+    shared = set(baseline_scores) & set(new_scores)
+    if not shared:
+        # Comparing runs from different datasets: every case would land in
+        # added/removed and the gate would "pass" a comparison that never
+        # happened. Refuse loudly instead of reporting a false pass.
+        raise StoreError(
+            f"baseline {name!r} (run {baseline['run_id']}) and this run share no cases: "
+            "a baseline only makes sense against the same dataset "
+            f"(baseline has {len(baseline_scores)} case(s), this run has {len(new_scores)})"
+        )
     regressed = [
         CaseRegression(
             case_id=c,
@@ -369,7 +382,7 @@ def regression_against_baseline(
             new_score=new_scores[c],
             drop=baseline_scores[c] - new_scores[c],
         )
-        for c in sorted(set(baseline_scores) & set(new_scores))
+        for c in sorted(shared)
         if baseline_scores[c] - new_scores[c] > threshold + 1e-9
     ]
     return RegressionReport(

@@ -12,6 +12,7 @@ from evalx.store import (
     compare_runs,
     list_baselines,
     list_runs,
+    load_run_meta,
     pin_baseline,
     regression_against_baseline,
     save_run,
@@ -221,6 +222,12 @@ def run(
             f"\nBaseline [cyan]{report.baseline_name}[/cyan] "
             f"(run {report.baseline_run_id}, threshold {report.threshold}):"
         )
+        baseline_suite = load_run_meta(report.baseline_run_id)["suite"]
+        if baseline_suite != result.suite:
+            console.print(
+                f"  [yellow]note: the baseline run came from suite {baseline_suite}, "
+                f"this run is {result.suite} — only the cases they share were compared[/yellow]"
+            )
         for c in report.regressed:
             console.print(
                 f"  [red]REGRESSED {c.case_id}: "
