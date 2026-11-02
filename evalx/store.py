@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS runs (
     judge_model VARCHAR,
     mean_score DOUBLE,
     n_cases INTEGER,
-    created_at TIMESTAMP DEFAULT now()
+    created_at TIMESTAMP DEFAULT now(),
+    n_errors INTEGER,
+    n_skipped INTEGER
 )
 """
 
@@ -55,6 +57,10 @@ CREATE TABLE IF NOT EXISTS case_results (
 # saved before the migration hold NULL here, which readers surface as None.
 _CASE_DETAIL_COLUMNS = ("question", "answer", "judge_reason", "checks_json", "error")
 
+# Per-run counts added after the first store release, migrated the same way.
+# Runs saved before the migration hold NULL: unknown, not zero.
+_RUN_COUNT_COLUMNS = ("n_errors", "n_skipped")
+
 
 _SCHEMA_BASELINES = """
 CREATE TABLE IF NOT EXISTS baselines (
@@ -74,6 +80,8 @@ def _connect(path: Path | None = None):
     con.execute(_SCHEMA_BASELINES)
     for col in _CASE_DETAIL_COLUMNS:
         con.execute(f"ALTER TABLE case_results ADD COLUMN IF NOT EXISTS {col} VARCHAR")
+    for col in _RUN_COUNT_COLUMNS:
+        con.execute(f"ALTER TABLE runs ADD COLUMN IF NOT EXISTS {col} INTEGER")
     return con
 
 
@@ -91,9 +99,20 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
     con = _connect(path)
     try:
         run_id = _new_run_id(con)
+        n_errors = sum(1 for r in result.results if r.error is not None)
         con.execute(
-            "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?, now())",
-            [run_id, result.suite, result.target, judge_model, result.mean_score, result.n_cases],
+            "INSERT INTO runs (run_id, suite, target, judge_model, mean_score, n_cases,"
+            " created_at, n_errors, n_skipped) VALUES (?, ?, ?, ?, ?, ?, now(), ?, ?)",
+            [
+                run_id,
+                result.suite,
+                result.target,
+                judge_model,
+                result.mean_score,
+                result.n_cases,
+                n_errors,
+                len(result.skipped),
+            ],
         )
         con.executemany(
             "INSERT INTO case_results (run_id, case_id, score, judge_score, latency_ms, question,"
@@ -119,17 +138,31 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
     return run_id
 
 
+_RUN_META_COLUMNS = [
+    "run_id",
+    "suite",
+    "target",
+    "judge_model",
+    "mean_score",
+    "n_cases",
+    "created_at",
+    "n_errors",
+    "n_skipped",
+]
+
+
 def list_runs(path: Path | None = None) -> list[dict]:
     """All stored runs, newest first."""
     con = _connect(path)
     try:
         rows = con.execute(
-            "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at"
+            "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
+            " n_errors, n_skipped"
             " FROM runs ORDER BY created_at DESC"
         ).fetchall()
     finally:
         con.close()
-    cols = ["run_id", "suite", "target", "judge_model", "mean_score", "n_cases", "created_at"]
+    cols = _RUN_META_COLUMNS
     return [dict(zip(cols, row)) for row in rows]
 
 
@@ -161,7 +194,8 @@ def load_run_meta(run_id: str, path: Path | None = None) -> dict:
     con = _connect(path)
     try:
         row = con.execute(
-            "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at"
+            "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
+            " n_errors, n_skipped"
             " FROM runs WHERE run_id = ?",
             [run_id],
         ).fetchone()
@@ -169,7 +203,7 @@ def load_run_meta(run_id: str, path: Path | None = None) -> dict:
         con.close()
     if row is None:
         raise StoreError(f"unknown run id: {run_id!r}")
-    cols = ["run_id", "suite", "target", "judge_model", "mean_score", "n_cases", "created_at"]
+    cols = _RUN_META_COLUMNS
     return dict(zip(cols, row))
 
 
@@ -228,6 +262,36 @@ class RunComparison(BaseModel):
     cases: list[CaseDelta]
 
 
+def count_error_cases(run_id: str, path: Path | None = None) -> int:
+    """Number of a run's cases stored with an error.
+
+    Counted from ``case_results`` rather than ``runs.n_errors``, so runs
+    saved before the per-run counts existed are checked too.
+    """
+    con = _connect(path)
+    try:
+        row = con.execute(
+            "SELECT count(*) FROM case_results WHERE run_id = ? AND error IS NOT NULL",
+            [run_id],
+        ).fetchone()
+    finally:
+        con.close()
+    return row[0]
+
+
+def judged_case_ids(run_id: str, path: Path | None = None) -> set[str]:
+    """Case ids that carry a judge score in a stored run."""
+    con = _connect(path)
+    try:
+        rows = con.execute(
+            "SELECT case_id FROM case_results WHERE run_id = ? AND judge_score IS NOT NULL",
+            [run_id],
+        ).fetchall()
+    finally:
+        con.close()
+    return {row[0] for row in rows}
+
+
 def compare_runs(ref_a: str, ref_b: str, path: Path | None = None) -> RunComparison:
     """Compare two stored runs case by case (inner join on case id)."""
     run_a = resolve_run_id(ref_a, path)
@@ -269,14 +333,27 @@ def compare_runs(ref_a: str, ref_b: str, path: Path | None = None) -> RunCompari
 # threshold?", because a mean can improve while one case craters.
 
 
-def pin_baseline(name: str, ref: str, path: Path | None = None) -> dict:
+def pin_baseline(
+    name: str, ref: str, path: Path | None = None, allow_errors: bool = False
+) -> dict:
     """Point baseline ``name`` at the run ``ref`` resolves to.
 
     Re-pinning an existing name moves it to the new run. Returns the
     baseline joined with the run's meta (mean, n_cases).
+
+    A run with error cases is refused unless ``allow_errors`` is set: a
+    baseline built on an outage scores the broken cases 0.0, so every later
+    run looks fine against it and real regressions stay hidden.
     """
     run_id = resolve_run_id(ref, path)
     meta = load_run_meta(run_id, path)
+    n_errors = count_error_cases(run_id, path)
+    if n_errors and not allow_errors:
+        raise StoreError(
+            f"run {run_id} has {n_errors} error case(s); refusing to pin it as a baseline "
+            "(a baseline built on an outage hides real regressions). "
+            "Pass --allow-errors to pin it anyway."
+        )
     con = _connect(path)
     try:
         con.execute(

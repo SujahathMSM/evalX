@@ -26,6 +26,9 @@ def score_band(score: float) -> str:
     return "fail"
 
 
+_UNKNOWN = "–"
+
+
 def runs_frame(path=None) -> pd.DataFrame:
     """All stored runs, newest first, with ``delta_prev``: each run's mean
     minus the previous (older) run's mean (None for the oldest run)."""
@@ -33,6 +36,12 @@ def runs_frame(path=None) -> pd.DataFrame:
     for i, run in enumerate(runs):
         older = runs[i + 1] if i + 1 < len(runs) else None
         run["delta_prev"] = run["mean_score"] - older["mean_score"] if older else None
+        # NULL counts come from runs saved before the store kept them:
+        # unknown, so shown as "–", never as a reassuring 0. Stored as text so
+        # the column has one type (Arrow, which Streamlit renders through,
+        # rejects int/str mixes).
+        for col in ("n_errors", "n_skipped"):
+            run[col] = _UNKNOWN if run[col] is None else str(run[col])
     return pd.DataFrame(
         runs,
         columns=[
@@ -44,6 +53,8 @@ def runs_frame(path=None) -> pd.DataFrame:
             "mean_score",
             "delta_prev",
             "n_cases",
+            "n_errors",
+            "n_skipped",
         ],
     )
 
@@ -191,6 +202,17 @@ def styled_scores(df: pd.DataFrame, score_columns: list[str]):
     return styler
 
 
+def _errors_cell(value: str) -> str:
+    if value not in (_UNKNOWN, "0"):
+        return "color: #ef4444; font-weight: 700"
+    return ""
+
+
+def styled_runs(df: pd.DataFrame):
+    """Run history: mean tinted by band, non-zero error counts in red."""
+    return styled_scores(df, ["mean_score"]).map(_errors_cell, subset=["n_errors"])
+
+
 def styled_comparison(df: pd.DataFrame):
     """Comparison frame: score columns tinted, delta coloured by sign."""
 
@@ -242,7 +264,7 @@ def main() -> None:
             df = df[df["target"] == target_filter]
         df = df.copy()
         df["judge_model"] = df["judge_model"].fillna("—")
-        st.dataframe(styled_scores(df, ["mean_score"]), width="stretch")
+        st.dataframe(styled_runs(df), width="stretch")
         st.caption("Mean score over time")
         st.altair_chart(trend_chart(df))
 

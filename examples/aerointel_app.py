@@ -24,12 +24,22 @@ this bridge.
 """
 
 import json
+import math
 import os
+import time
 import urllib.error
 import urllib.request
 
 _DEFAULT_URL = "http://127.0.0.1:8000"
 _TIMEOUT_S = 120.0  # a grounded answer takes a while (retrieval + LLM)
+
+# HTTP 429 handling: AeroIntel rate-limits with a token bucket (capacity 20,
+# refill 0.5 tokens/s), so a long eval run drains it. Rather than disabling
+# the limiter, wait and retry: honour Retry-After (capped), else wait 2.0s --
+# one token refill at 0.5 tokens/s.
+_MAX_429_RETRIES = 30
+_RETRY_AFTER_CAP_S = 60.0
+_RETRY_FALLBACK_S = 2.0
 
 _token: str | None = None
 
@@ -42,8 +52,24 @@ def _base_url() -> str:
     return os.environ.get("AEROINTEL_URL", _DEFAULT_URL).rstrip("/")
 
 
+def _retry_delay(retry_after: str | None) -> float:
+    """Seconds to wait before retrying a 429, from its Retry-After header."""
+    try:
+        delay = float(retry_after) if retry_after is not None else None
+    except ValueError:
+        delay = None  # e.g. an HTTP-date: fall back rather than parse it
+    if delay is None or not math.isfinite(delay) or delay < 0:
+        return _RETRY_FALLBACK_S
+    return min(delay, _RETRY_AFTER_CAP_S)
+
+
 def _post(path: str, payload: dict, token: str | None = None) -> dict:
-    """POST JSON to the service and return the parsed JSON body."""
+    """POST JSON to the service and return the parsed JSON body.
+
+    HTTP 429 is retried up to ``_MAX_429_RETRIES`` times (see _retry_delay);
+    every other error, and a 429 that outlasts the budget, raises
+    AeroIntelError.
+    """
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -53,17 +79,25 @@ def _post(path: str, payload: dict, token: str | None = None) -> dict:
         headers=headers,
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=_TIMEOUT_S) as response:
-            return json.loads(response.read())
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode(errors="replace")[:300]
-        raise AeroIntelError(f"AeroIntel {path} returned HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise AeroIntelError(
-            f"cannot reach AeroIntel at {_base_url()} ({exc.reason}); "
-            "is the service running? (docker compose up, in the aerointel repo)"
-        ) from exc
+    retries = 0
+    while True:
+        try:
+            with urllib.request.urlopen(request, timeout=_TIMEOUT_S) as response:
+                return json.loads(response.read())
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and retries < _MAX_429_RETRIES:
+                retries += 1
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                exc.close()
+                time.sleep(_retry_delay(retry_after))
+                continue
+            detail = exc.read().decode(errors="replace")[:300]
+            raise AeroIntelError(f"AeroIntel {path} returned HTTP {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise AeroIntelError(
+                f"cannot reach AeroIntel at {_base_url()} ({exc.reason}); "
+                "is the service running? (docker compose up, in the aerointel repo)"
+            ) from exc
 
 
 def _credentials_configured() -> bool:
