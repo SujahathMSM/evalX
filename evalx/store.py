@@ -45,14 +45,15 @@ CREATE TABLE IF NOT EXISTS case_results (
     question VARCHAR,
     answer VARCHAR,
     judge_reason VARCHAR,
-    checks_json VARCHAR
+    checks_json VARCHAR,
+    error VARCHAR
 )
 """
 
 # Detail columns added after the first store release. Fresh databases get
 # them from the schema above; older files are migrated in _connect. Rows
 # saved before the migration hold NULL here, which readers surface as None.
-_CASE_DETAIL_COLUMNS = ("question", "answer", "judge_reason", "checks_json")
+_CASE_DETAIL_COLUMNS = ("question", "answer", "judge_reason", "checks_json", "error")
 
 
 _SCHEMA_BASELINES = """
@@ -77,7 +78,7 @@ def _connect(path: Path | None = None):
 
 
 def _new_run_id(con) -> str:
-    base = datetime.now().strftime("%Y%m%d-%H%M%S")
+    base = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
     run_id, n = base, 1
     while con.execute("SELECT 1 FROM runs WHERE run_id = ?", [run_id]).fetchone():
         n += 1
@@ -95,7 +96,8 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
             [run_id, result.suite, result.target, judge_model, result.mean_score, result.n_cases],
         )
         con.executemany(
-            "INSERT INTO case_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO case_results (run_id, case_id, score, judge_score, latency_ms, question,"
+            " answer, judge_reason, checks_json, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     run_id,
@@ -107,6 +109,7 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
                     r.answer,
                     r.judge_reason,
                     json.dumps([c.model_dump() for c in r.checks]),
+                    r.error,
                 )
                 for r in result.results
             ],
@@ -191,7 +194,7 @@ def load_case_details(run_id: str, path: Path | None = None) -> list[dict]:
     try:
         rows = con.execute(
             "SELECT case_id, score, judge_score, latency_ms, question, answer,"
-            " judge_reason, checks_json FROM case_results WHERE run_id = ?",
+            " judge_reason, checks_json, error FROM case_results WHERE run_id = ?",
             [run_id],
         ).fetchall()
     finally:
@@ -201,6 +204,7 @@ def load_case_details(run_id: str, path: Path | None = None) -> list[dict]:
     for row in rows:
         detail = dict(zip(cols, row[:7]))
         detail["checks"] = json.loads(row[7]) if row[7] else None
+        detail["error"] = row[8]
         details.append(detail)
     return details
 

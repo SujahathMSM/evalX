@@ -371,3 +371,12 @@ def test_cli_run_baseline_suite_mismatch_warns_but_passes(isolated_store):
     assert res.exit_code == 0
     assert "came from suite datasets/renamed/v1" in res.output
     assert "No case regressed" in res.output
+
+
+def test_case_error_round_trips_through_store(isolated_store):
+    result = _fake_result([1.0, 0.0])
+    result.results[1].error = "target: RuntimeError: boom"
+    run_id = store.save_run(result)
+    details = {d["case_id"]: d for d in store.load_case_details(run_id)}
+    assert details["q0"]["error"] is None
+    assert details["q1"]["error"] == "target: RuntimeError: boom"
