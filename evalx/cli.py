@@ -7,10 +7,63 @@ from rich.table import Table
 from evalx import __version__
 from evalx.judge import LLMJudge
 from evalx.runner import run_suite
-from evalx.store import compare_runs, list_runs, save_run
+from evalx.store import (
+    StoreError,
+    compare_runs,
+    list_baselines,
+    list_runs,
+    pin_baseline,
+    regression_against_baseline,
+    save_run,
+)
 
 app = typer.Typer(help="evalx: eval harness for LLM apps.")
 console = Console()
+
+baseline_app = typer.Typer(help="Baselines: named runs the regression gate compares against.")
+app.add_typer(baseline_app, name="baseline")
+
+
+@baseline_app.command("pin")
+def baseline_pin(
+    ref: str = typer.Argument(..., help="Run id, prefix, 'latest' or 'latest-N'."),
+    name: str = typer.Option("stable", help="Baseline name to pin (re-pinning moves it)."),
+) -> None:
+    """Pin a stored run as a named baseline for the regression gate."""
+    try:
+        baseline = pin_baseline(name, ref)
+    except StoreError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    console.print(
+        f"Baseline [cyan]{baseline['name']}[/cyan] pinned to run "
+        f"[cyan]{baseline['run_id']}[/cyan] "
+        f"(mean {baseline['mean_score']:.3f} over {baseline['n_cases']} cases)"
+    )
+
+
+@baseline_app.command("list")
+def baseline_list() -> None:
+    """List pinned baselines."""
+    baselines = list_baselines()
+    if not baselines:
+        console.print("No baselines pinned yet. Pin one with: evalx baseline pin latest")
+        return
+    table = Table(title="evalx baselines")
+    table.add_column("name", style="cyan")
+    table.add_column("run id")
+    table.add_column("mean", justify="right")
+    table.add_column("cases", justify="right")
+    table.add_column("pinned")
+    for b in baselines:
+        table.add_row(
+            b["name"],
+            b["run_id"],
+            f"{b['mean_score']:.3f}",
+            str(b["n_cases"]),
+            str(b["pinned_at"]),
+        )
+    console.print(table)
 
 
 @app.command()
@@ -118,6 +171,14 @@ def run(
         "accept their own default temperature.",
     ),
     no_save: bool = typer.Option(False, help="Don't save this run to the local store."),
+    baseline: str = typer.Option(
+        None,
+        help="Baseline name: also fail if any single case drops past "
+        "--fail-on-regression vs that baseline, even when the mean is fine.",
+    ),
+    fail_on_regression: float = typer.Option(
+        0.2, help="Max allowed per-case score drop vs the baseline (needs --baseline)."
+    ),
 ) -> None:
     """Run a golden dataset against a target app and print the scores."""
     judge = LLMJudge(judge_model, temperature=judge_temperature) if judge_model else None
@@ -142,10 +203,46 @@ def run(
     console.print(table)
     console.print(f"\nMean score: [bold]{result.mean_score:.3f}[/bold] over {result.n_cases} cases")
 
+    failed = False
     if result.mean_score < fail_under:
         console.print(f"[red]FAIL: mean {result.mean_score:.3f} < gate {fail_under}[/red]")
+        failed = True
+    else:
+        console.print("[green]Gate passed.[/green]")
+
+    if baseline is not None:
+        new_scores = {r.case_id: r.score for r in result.results}
+        try:
+            report = regression_against_baseline(baseline, new_scores, fail_on_regression)
+        except StoreError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(code=1) from exc
+        console.print(
+            f"\nBaseline [cyan]{report.baseline_name}[/cyan] "
+            f"(run {report.baseline_run_id}, threshold {report.threshold}):"
+        )
+        for c in report.regressed:
+            console.print(
+                f"  [red]REGRESSED {c.case_id}: "
+                f"{c.baseline_score:.2f} -> {c.new_score:.2f} (drop {c.drop:.2f})[/red]"
+            )
+        for case_id in report.added:
+            console.print(f"  [yellow]note: {case_id} is new (not in baseline) — ignored[/yellow]")
+        for case_id in report.removed:
+            console.print(
+                f"  [yellow]note: {case_id} is in the baseline but not in this run — ignored[/yellow]"
+            )
+        if report.passed:
+            console.print("[green]No case regressed past the threshold.[/green]")
+        else:
+            console.print(
+                f"[red]REGRESSION GATE FAILED: {len(report.regressed)} case(s) "
+                f"dropped past {report.threshold}[/red]"
+            )
+            failed = True
+
+    if failed:
         raise typer.Exit(code=1)
-    console.print("[green]Gate passed.[/green]")
 
 
 if __name__ == "__main__":

@@ -55,12 +55,22 @@ CREATE TABLE IF NOT EXISTS case_results (
 _CASE_DETAIL_COLUMNS = ("question", "answer", "judge_reason", "checks_json")
 
 
+_SCHEMA_BASELINES = """
+CREATE TABLE IF NOT EXISTS baselines (
+    name VARCHAR PRIMARY KEY,
+    run_id VARCHAR,
+    pinned_at TIMESTAMP DEFAULT now()
+)
+"""
+
+
 def _connect(path: Path | None = None):
     path = path or store_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(path))
     con.execute(_SCHEMA_RUNS)
     con.execute(_SCHEMA_CASES)
+    con.execute(_SCHEMA_BASELINES)
     for col in _CASE_DETAIL_COLUMNS:
         con.execute(f"ALTER TABLE case_results ADD COLUMN IF NOT EXISTS {col} VARCHAR")
     return con
@@ -244,4 +254,130 @@ def compare_runs(ref_a: str, ref_b: str, path: Path | None = None) -> RunCompari
         regressed=regressed,
         unchanged=len(cases) - improved - regressed,
         cases=cases,
+    )
+
+
+# --- Baselines and the per-case regression gate (M5) -----------------------
+#
+# A baseline is a named pointer at a stored run: "the last run we trusted".
+# The regression gate then asks a stricter question than the mean gate --
+# not "is the average still fine?" but "did ANY single case fall past the
+# threshold?", because a mean can improve while one case craters.
+
+
+def pin_baseline(name: str, ref: str, path: Path | None = None) -> dict:
+    """Point baseline ``name`` at the run ``ref`` resolves to.
+
+    Re-pinning an existing name moves it to the new run. Returns the
+    baseline joined with the run's meta (mean, n_cases).
+    """
+    run_id = resolve_run_id(ref, path)
+    meta = load_run_meta(run_id, path)
+    con = _connect(path)
+    try:
+        con.execute(
+            "INSERT OR REPLACE INTO baselines VALUES (?, ?, now())",
+            [name, run_id],
+        )
+        row = con.execute(
+            "SELECT pinned_at FROM baselines WHERE name = ?", [name]
+        ).fetchone()
+    finally:
+        con.close()
+    return {
+        "name": name,
+        "run_id": run_id,
+        "mean_score": meta["mean_score"],
+        "n_cases": meta["n_cases"],
+        "pinned_at": row[0],
+    }
+
+
+def get_baseline(name: str, path: Path | None = None) -> dict | None:
+    """One baseline by name (joined with its run's meta), or None."""
+    con = _connect(path)
+    try:
+        row = con.execute(
+            "SELECT b.name, b.run_id, b.pinned_at, r.mean_score, r.n_cases"
+            " FROM baselines b JOIN runs r ON r.run_id = b.run_id"
+            " WHERE b.name = ?",
+            [name],
+        ).fetchone()
+    finally:
+        con.close()
+    if row is None:
+        return None
+    cols = ["name", "run_id", "pinned_at", "mean_score", "n_cases"]
+    return dict(zip(cols, row))
+
+
+def list_baselines(path: Path | None = None) -> list[dict]:
+    """All pinned baselines, most recently pinned first."""
+    con = _connect(path)
+    try:
+        rows = con.execute(
+            "SELECT b.name, b.run_id, b.pinned_at, r.mean_score, r.n_cases"
+            " FROM baselines b JOIN runs r ON r.run_id = b.run_id"
+            " ORDER BY b.pinned_at DESC"
+        ).fetchall()
+    finally:
+        con.close()
+    cols = ["name", "run_id", "pinned_at", "mean_score", "n_cases"]
+    return [dict(zip(cols, row)) for row in rows]
+
+
+class CaseRegression(BaseModel):
+    case_id: str
+    baseline_score: float
+    new_score: float
+    drop: float
+
+
+class RegressionReport(BaseModel):
+    baseline_name: str
+    baseline_run_id: str
+    threshold: float
+    regressed: list[CaseRegression]
+    added: list[str]
+    removed: list[str]
+    passed: bool
+
+
+def regression_against_baseline(
+    name: str,
+    new_scores: dict[str, float],
+    threshold: float,
+    path: Path | None = None,
+) -> RegressionReport:
+    """Compare fresh per-case scores against a pinned baseline.
+
+    A case regresses when its score dropped by MORE than ``threshold``
+    (a drop of exactly the threshold still passes). Cases that exist on
+    only one side are reported as added/removed and never fail the gate:
+    a changed dataset is a warning, not a regression.
+    """
+    baseline = get_baseline(name, path)
+    if baseline is None:
+        raise StoreError(
+            f"no baseline named {name!r}; pin one first: evalx baseline pin latest --name {name}"
+        )
+    baseline_scores = load_case_scores(baseline["run_id"], path)
+    regressed = [
+        CaseRegression(
+            case_id=c,
+            baseline_score=baseline_scores[c],
+            new_score=new_scores[c],
+            drop=baseline_scores[c] - new_scores[c],
+        )
+        for c in sorted(set(baseline_scores) & set(new_scores))
+        if baseline_scores[c] - new_scores[c] > threshold + 1e-9
+    ]
+    return RegressionReport(
+        baseline_name=name,
+        baseline_run_id=baseline["run_id"],
+        threshold=threshold,
+        regressed=regressed,
+        added=sorted(set(new_scores) - set(baseline_scores)),
+        removed=sorted(set(baseline_scores) - set(new_scores)),
+        passed=not regressed,
     )
