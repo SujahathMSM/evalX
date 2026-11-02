@@ -266,6 +266,8 @@ def main() -> None:
                 "Re-run the suite to capture questions, answers and judge reasons."
             )
         elif detail is not None:
+            if detail.get("error"):
+                st.error(detail["error"])
             st.markdown(f"**Question**\n\n{detail['question']}")
             st.markdown(f"**App answer**\n\n{detail['answer']}")
             if detail["checks"]:

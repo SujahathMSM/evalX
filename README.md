@@ -125,6 +125,13 @@ evalx run --suite datasets/demo/v1 --target examples.demo_app:answer \
 ```
 
 Only cases with a `judge:` rubric invoke the judge; the rest use code checks.
+Cases with a rubric and no checks are skipped when you run without
+`--judge-model` (listed in the output, left out of the mean) rather than
+scored 0.
+
+A case never aborts the run: if your target or the judge raises, that case
+records the error (shown in the CLI and the dashboard drill-down) and scores
+0.0, so a crashing app can't slip past the gate.
 Two judged cases on Haiku cost a fraction of a cent.
 
 ## Run store & comparison

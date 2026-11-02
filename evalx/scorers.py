@@ -29,19 +29,23 @@ def score_check(check: Check, answer: str) -> float:
     return _SCORERS[check.type](check, answer)
 
 
-def score_case(case: TestCase, answer: str) -> tuple[float, list[float]]:
-    """Weighted mean of a case's checks. Returns (score, per-check scores)."""
-    if not case.checks:
-        return 0.0, []
-    per_check = [score_check(c, answer) for c in case.checks]
-    total_weight = sum(c.weight for c in case.checks)
-    score = sum(s * c.weight for s, c in zip(per_check, case.checks)) / total_weight
-    return score, per_check
-
-
 def score_case_details(case: TestCase, answer: str) -> list[CheckScore]:
     """Per-check detail for the record: what was expected and how it scored."""
     return [
         CheckScore(type=c.type, expected=c.expected, weight=c.weight, score=score_check(c, answer))
         for c in case.checks
     ]
+
+
+def combine_checks(details: list[CheckScore]) -> float:
+    """Weighted mean of already-scored checks (0.0 when there are none)."""
+    total_weight = sum(d.weight for d in details)
+    if not total_weight:
+        return 0.0
+    return sum(d.score * d.weight for d in details) / total_weight
+
+
+def score_case(case: TestCase, answer: str) -> tuple[float, list[float]]:
+    """Weighted mean of a case's checks. Returns (score, per-check scores)."""
+    details = score_case_details(case, answer)
+    return combine_checks(details), [d.score for d in details]

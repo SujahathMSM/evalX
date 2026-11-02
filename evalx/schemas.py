@@ -54,6 +54,9 @@ class CaseResult(BaseModel):
     judge_reason: str | None = None
     score: float
     latency_ms: float
+    # Set when the target or the judge raised on this case. The case still
+    # counts in the mean with score 0.0, so a crashing app can't pass a gate.
+    error: str | None = None
 
 
 class RunResult(BaseModel):
@@ -64,4 +67,7 @@ class RunResult(BaseModel):
     n_cases: int
     mean_score: float
     results: list[CaseResult]
+    # Cases that only have a judge rubric, run without a judge: nothing could
+    # score them, so they are left out of ``results`` and the mean.
+    skipped: list[str] = []
     run_id: str | None = None  # assigned when the run is saved to the store

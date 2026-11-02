@@ -202,6 +202,14 @@ def run(
         row.append(f"{r.latency_ms:.0f}")
         table.add_row(*row, style=style)
     console.print(table)
+    for r in result.results:
+        if r.error:
+            console.print(f"[red]ERROR {r.case_id}: {r.error}[/red]")
+    if result.skipped:
+        console.print(
+            f"[yellow]Skipped {len(result.skipped)} judge-only case(s) "
+            f"(no --judge-model): {', '.join(result.skipped)}[/yellow]"
+        )
     console.print(f"\nMean score: [bold]{result.mean_score:.3f}[/bold] over {result.n_cases} cases")
 
     failed = False
