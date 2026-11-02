@@ -142,6 +142,31 @@ evalx compare latest-1 latest   # per-case delta table + mean change
 Run references accept a full id, a unique prefix, `latest`, or `latest-N`.
 `--no-save` skips storing a throwaway run.
 
+## Baselines & the regression gate (M5)
+
+A mean-score gate can pass while one case craters. Pin a run you trust as a
+baseline, and every later run is also graded case-by-case against it:
+
+```bash
+evalx baseline pin 20261030-071230 --name aerointel   # bookmark a stored run
+evalx baseline list                                   # see your bookmarks
+
+evalx run --suite datasets/aerointel/v1 --target examples.aerointel_app:answer \
+  --baseline aerointel                                # fail if any case drops > 0.2
+```
+
+A case fails the gate only when its score drops by *more* than the threshold
+(`--fail-on-regression`, default 0.2 — a drop of exactly 0.2 still passes).
+Cases added or removed since the baseline are reported as warnings, never
+failures: a changed dataset is not a regression.
+
+A baseline is only meaningful against the **same dataset** — the comparison
+matches on case ids. If a run and its baseline share no cases at all, the
+gate refuses with an error instead of passing a comparison that never
+happened; if the baseline came from a differently-named suite, the shared
+cases are still compared, with a warning. Baselines live in the local run
+store, so a CI gate needs a store that contains the pin.
+
 ## Dashboard
 
 ```bash
@@ -166,10 +191,11 @@ the final grade.*
 
 ## Roadmap
 
-- **M5 — per-case regression gate:** pin a baseline run (`evalx baseline`)
-  and fail CI when *any single case* drops past a threshold
-  (`--fail-on-regression 0.2`), even if the mean improved — mean gates hide
-  single-case craters.
+- **M5 — per-case regression gate — done:** pin a baseline run and fail
+  when *any single case* drops past a threshold, even if the mean improved
+  — mean gates hide single-case craters. Includes a guard against
+  baselines from a different dataset. See "Baselines & the regression
+  gate" above.
 - **Quality-vs-cost compare:** judge token cost and latency deltas next to
   score deltas in `evalx compare`.
 - **Dogfooding — done:** evalx graded AeroIntel, a local
