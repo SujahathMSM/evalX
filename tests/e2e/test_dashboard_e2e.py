@@ -19,7 +19,7 @@ import pytest
 from evalx import store
 from evalx.schemas import CaseResult, RunResult
 
-from .conftest import REPO_ROOT
+from .conftest import REPO_ROOT, RedactedEnv
 
 pytestmark = pytest.mark.e2e
 
@@ -32,6 +32,35 @@ def _free_port() -> int:
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
+
+
+def _new_process_group() -> dict:
+    """Popen kwargs that put the dashboard and its streamlit child in their
+    own process group, so teardown can stop both."""
+    if sys.platform == "win32":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _stop_process_tree(proc: subprocess.Popen) -> None:
+    """Stop ``evalx dashboard`` and the streamlit server it spawned."""
+    if proc.poll() is None:
+        if sys.platform == "win32":
+            # No process groups to signal on Windows: taskkill /T takes the
+            # whole tree (evalx -> python -m streamlit) down.
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+                check=False,
+            )
+        else:
+            os.killpg(proc.pid, signal.SIGTERM)
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        if sys.platform != "win32":
+            os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait(timeout=10)
 
 
 def _result(suite: str, errors: dict[str, str]) -> RunResult:
@@ -65,7 +94,7 @@ def dashboard_url(tmp_path):
     store.save_run(_result("datasets/outage/v1", {"a1": OUTAGE_ERROR}), path=db)
 
     port = _free_port()
-    env = dict(os.environ, EVALX_STORE=str(db), PYTHONPATH=str(REPO_ROOT))
+    env = RedactedEnv(os.environ, EVALX_STORE=str(db), PYTHONPATH=str(REPO_ROOT))
     env["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
     no_proxy = ",".join(filter(None, [env.get("NO_PROXY", ""), "127.0.0.1", "localhost"]))
     env.update(NO_PROXY=no_proxy, no_proxy=no_proxy)
@@ -75,7 +104,7 @@ def dashboard_url(tmp_path):
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        start_new_session=True,  # so the streamlit child dies with it
+        **_new_process_group(),  # so the streamlit child dies with it
     )
     url = f"http://127.0.0.1:{port}"
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -93,11 +122,7 @@ def dashboard_url(tmp_path):
             time.sleep(0.5)
         yield url
     finally:
-        os.killpg(proc.pid, signal.SIGTERM)
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            os.killpg(proc.pid, signal.SIGKILL)
+        _stop_process_tree(proc)
 
 
 @pytest.fixture

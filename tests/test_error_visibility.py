@@ -15,6 +15,8 @@ from evalx.cli import app
 from evalx.runner import run_suite
 from evalx.schemas import CaseResult, RunResult
 
+from .helpers import table_cells
+
 DEMO = "datasets/demo/v1"
 TARGET = "examples.demo_app:answer"
 CRASHING = "tests.test_runner:_crash_on_ceo"  # raises on q002 and q004
@@ -107,7 +109,7 @@ def test_cli_runs_shows_error_and_skip_columns(isolated_store):
     assert "Errors" in res.output
     assert "Skipped" in res.output
     row = next(line for line in res.output.splitlines() if " s " in line)
-    cells = [c.strip() for c in row.split("│") if c.strip()]
+    cells = table_cells(row)
     # run id, suite, mean, cases, errors, skipped, created
     assert cells[4] == "2"
     assert cells[5] == "2"
@@ -127,7 +129,7 @@ def test_cli_runs_renders_legacy_counts_as_dash(isolated_store):
     res = CliRunner().invoke(app, ["runs"])
     assert res.exit_code == 0
     row = next(line for line in res.output.splitlines() if "old-run" in line)
-    cells = [c.strip() for c in row.split("│") if c.strip()]
+    cells = table_cells(row)
     assert cells[4] == "–"
     assert cells[5] == "–"
 
