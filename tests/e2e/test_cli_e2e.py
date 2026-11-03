@@ -12,6 +12,8 @@ import pytest
 
 from evalx import store
 
+from ..helpers import table_cells
+
 pytestmark = pytest.mark.e2e
 
 FRANCE = "What is the capital of France?"
@@ -154,7 +156,7 @@ def test_target_outage_trips_infra_gate_and_blocks_pinning(
     runs = evalx_cli("runs")
     assert runs.returncode == 0
     row = next(line for line in runs.stdout.splitlines() if run["run_id"] in line)
-    cells = [c.strip() for c in row.split("│") if c.strip()]
+    cells = table_cells(row)
     assert cells[4:6] == ["1", "1"]  # Errors, Skipped
 
     pin = evalx_cli("baseline", "pin", "latest")

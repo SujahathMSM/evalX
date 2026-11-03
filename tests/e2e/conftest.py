@@ -117,10 +117,21 @@ def fake_openai():
     server.server_close()
 
 
+class RedactedEnv(dict):
+    """An environment dict that never prints its values.
+
+    pytest shows fixture values in failure reports; the inherited environment
+    can hold real API keys and secrets, so its repr names keys only.
+    """
+
+    def __repr__(self) -> str:
+        return f"<environment: {len(self)} variables, values redacted>"
+
+
 @pytest.fixture
 def e2e_env(tmp_path, fake_openai):
     """Environment for an evalx subprocess wired to the fake server."""
-    env = dict(os.environ)
+    env = RedactedEnv(os.environ)
     no_proxy = ",".join(filter(None, [env.get("NO_PROXY", ""), "127.0.0.1", "localhost"]))
     env.update(
         {
@@ -139,6 +150,9 @@ def e2e_env(tmp_path, fake_openai):
             "no_proxy": no_proxy,
             # wide terminal so Rich doesn't wrap the lines we assert on
             "COLUMNS": "250",
+            # UTF-8 output on every platform (Windows defaults to cp1252)
+            "PYTHONIOENCODING": "utf-8",
+            "PYTHONUTF8": "1",
             "PYTHONPATH": str(REPO_ROOT),
         }
     )
@@ -158,6 +172,8 @@ def evalx_cli(e2e_env):
             env=e2e_env,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
             check=False,
         )
