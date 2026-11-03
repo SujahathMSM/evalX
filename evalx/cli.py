@@ -193,6 +193,12 @@ def run(
         help="Temperature for the judge. Omitted by default: some models only "
         "accept their own default temperature.",
     ),
+    workers: int = typer.Option(
+        1,
+        min=1,
+        help="Run this many cases at once (thread pool). Results keep dataset order. "
+        "Mind your target's rate limits.",
+    ),
     no_save: bool = typer.Option(False, help="Don't save this run to the local store."),
     baseline: str = typer.Option(
         None,
@@ -205,7 +211,7 @@ def run(
 ) -> None:
     """Run a golden dataset against a target app and print the scores."""
     judge = LLMJudge(judge_model, temperature=judge_temperature) if judge_model else None
-    result = run_suite(suite, target, judge=judge)
+    result = run_suite(suite, target, judge=judge, workers=workers)
     if not no_save:
         result.run_id = save_run(result, judge_model)
         console.print(f"Run saved: [cyan]{result.run_id}[/cyan]")
