@@ -1,6 +1,7 @@
 """The runner: execute every case against the target and score the answers."""
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from evalx.adapters import resolve_target
@@ -26,7 +27,55 @@ def _error_text(stage: str, exc: Exception) -> str:
     return f"{stage}: {type(exc).__name__}: {exc}"
 
 
-def run_suite(suite: str | Path, target: str, judge=None) -> RunResult:
+def _run_case(case: TestCase, answer_fn, judge) -> CaseResult:
+    """Ask the target one case, score it, and never raise (errors are recorded)."""
+    started = time.perf_counter()
+    try:
+        answer = answer_fn(case.question)
+    except Exception as exc:  # noqa: BLE001 - any app failure is a case failure
+        return CaseResult(
+            case_id=case.id,
+            question=case.question,
+            answer="",
+            check_scores=[],
+            score=0.0,
+            latency_ms=(time.perf_counter() - started) * 1000.0,
+            error=_error_text("target", exc),
+        )
+    latency_ms = (time.perf_counter() - started) * 1000.0
+    if not isinstance(answer, str):
+        answer = "" if answer is None else str(answer)
+
+    details = score_case_details(case, answer)
+    code_score = combine_checks(details)
+
+    judge_score: float | None = None
+    judge_reason: str | None = None
+    error: str | None = None
+    if judge is not None and case.judge is not None:
+        try:
+            verdict = judge.score(case, answer)
+            judge_score, judge_reason = verdict.score, verdict.reason
+        except Exception as exc:  # noqa: BLE001 - recorded on the case
+            error = _error_text("judge", exc)
+
+    return CaseResult(
+        case_id=case.id,
+        question=case.question,
+        answer=answer,
+        check_scores=[d.score for d in details],
+        checks=details,
+        judge_score=judge_score,
+        judge_reason=judge_reason,
+        # A failed judge leaves the case unscored: 0.0, not a code-only
+        # score that would quietly drop the rubric from the grade.
+        score=0.0 if error else _combine_score(case, code_score, judge_score),
+        latency_ms=latency_ms,
+        error=error,
+    )
+
+
+def run_suite(suite: str | Path, target: str, judge=None, workers: int = 1) -> RunResult:
     """Run all cases in a dataset against a target app. Returns the run result.
 
     ``judge`` is optional and duck-typed: any object with
@@ -37,67 +86,26 @@ def run_suite(suite: str | Path, target: str, judge=None) -> RunResult:
     the case is recorded with ``error`` set and a score of 0.0. Cases that
     have only a judge rubric and no checks are skipped (listed in
     ``RunResult.skipped``, left out of the mean) when no judge is given.
+
+    ``workers`` > 1 runs cases concurrently on a thread pool (target and judge
+    calls are I/O-bound, so threads are enough). The target and judge must
+    then be safe to call from several threads. Results keep dataset order
+    whatever order the cases finish in, so a parallel run reports exactly
+    like a sequential one.
     """
+    if workers < 1:
+        raise ValueError(f"workers must be >= 1, got {workers}")
     cases = load_dataset(suite)
     answer_fn = resolve_target(target)
 
-    results: list[CaseResult] = []
-    skipped: list[str] = []
-    for case in cases:
-        if not case.checks and judge is None:
-            skipped.append(case.id)
-            continue
+    skipped = [c.id for c in cases if not c.checks and judge is None]
+    to_run = [c for c in cases if c.checks or judge is not None]
 
-        started = time.perf_counter()
-        try:
-            answer = answer_fn(case.question)
-        except Exception as exc:  # noqa: BLE001 - any app failure is a case failure
-            latency_ms = (time.perf_counter() - started) * 1000.0
-            results.append(
-                CaseResult(
-                    case_id=case.id,
-                    question=case.question,
-                    answer="",
-                    check_scores=[],
-                    score=0.0,
-                    latency_ms=latency_ms,
-                    error=_error_text("target", exc),
-                )
-            )
-            continue
-        latency_ms = (time.perf_counter() - started) * 1000.0
-        if not isinstance(answer, str):
-            answer = "" if answer is None else str(answer)
-
-        details = score_case_details(case, answer)
-        code_score = combine_checks(details)
-
-        judge_score: float | None = None
-        judge_reason: str | None = None
-        error: str | None = None
-        if judge is not None and case.judge is not None:
-            try:
-                verdict = judge.score(case, answer)
-                judge_score, judge_reason = verdict.score, verdict.reason
-            except Exception as exc:  # noqa: BLE001 - recorded on the case
-                error = _error_text("judge", exc)
-
-        results.append(
-            CaseResult(
-                case_id=case.id,
-                question=case.question,
-                answer=answer,
-                check_scores=[d.score for d in details],
-                checks=details,
-                judge_score=judge_score,
-                judge_reason=judge_reason,
-                # A failed judge leaves the case unscored: 0.0, not a code-only
-                # score that would quietly drop the rubric from the grade.
-                score=0.0 if error else _combine_score(case, code_score, judge_score),
-                latency_ms=latency_ms,
-                error=error,
-            )
-        )
+    if workers == 1 or len(to_run) <= 1:
+        results = [_run_case(case, answer_fn, judge) for case in to_run]
+    else:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="evalx") as pool:
+            results = list(pool.map(lambda case: _run_case(case, answer_fn, judge), to_run))
 
     mean_score = sum(r.score for r in results) / len(results) if results else 0.0
     return RunResult(

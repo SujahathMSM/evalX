@@ -380,3 +380,18 @@ def test_case_error_round_trips_through_store(isolated_store):
     details = {d["case_id"]: d for d in store.load_case_details(run_id)}
     assert details["q0"]["error"] is None
     assert details["q1"]["error"] == "target: RuntimeError: boom"
+
+
+def test_cli_run_workers_option(isolated_store):
+    res = CliRunner().invoke(
+        app, ["run", "--suite", DEMO, "--target", TARGET, "--workers", "3", "--no-save"]
+    )
+    assert res.exit_code == 0
+    assert "Mean score: 0.500 over 6 cases" in res.output
+
+
+def test_cli_run_rejects_zero_workers(isolated_store):
+    res = CliRunner().invoke(
+        app, ["run", "--suite", DEMO, "--target", TARGET, "--workers", "0", "--no-save"]
+    )
+    assert res.exit_code == 2  # Typer usage error: below min=1

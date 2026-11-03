@@ -1,5 +1,8 @@
 """Tests for the runner: the harness must catch the demo app's failures."""
 
+import threading
+import time as _time
+
 import pytest
 
 from evalx.adapters import AdapterError, resolve_target
@@ -157,3 +160,114 @@ def test_judge_only_case_scored_with_judge(tmp_path):
     by_id = {r.case_id: r for r in result.results}
     assert by_id["c2"].score == pytest.approx(0.4)
     assert result.mean_score == pytest.approx(0.7)
+
+
+# --- Concurrency: --workers -------------------------------------------------
+
+
+class _InFlight:
+    """Counts how many target calls overlap."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.now = 0
+        self.peak = 0
+
+    def __enter__(self):
+        with self.lock:
+            self.now += 1
+            self.peak = max(self.peak, self.now)
+
+    def __exit__(self, *exc):
+        with self.lock:
+            self.now -= 1
+
+
+_in_flight = _InFlight()
+
+
+def _slow_demo(question: str) -> str:
+    """Demo app answers, slowed so concurrent calls overlap. Earlier cases are
+    slower, so in a parallel run they finish last."""
+    from examples.demo_app import answer
+
+    delay = {"revenue": 0.15, "CEO": 0.12}.get(
+        next((k for k in ("revenue", "CEO") if k in question), ""), 0.05
+    )
+    with _in_flight:
+        _time.sleep(delay)
+    return answer(question)
+
+
+SLOW = "tests.test_runner:_slow_demo"
+
+
+@pytest.fixture
+def in_flight():
+    global _in_flight
+    _in_flight = _InFlight()
+    return lambda: _in_flight
+
+
+def test_workers_run_cases_concurrently(in_flight):
+    run_suite(DEMO, SLOW, workers=4)
+    assert in_flight().peak > 1
+
+
+def test_single_worker_is_sequential(in_flight):
+    run_suite(DEMO, SLOW)
+    assert in_flight().peak == 1
+
+
+def test_parallel_run_matches_sequential_run():
+    seq = run_suite(DEMO, SLOW)
+    par = run_suite(DEMO, SLOW, workers=6)
+    # Same cases, same order (dataset order, not finish order), same scores.
+    assert [r.case_id for r in par.results] == [r.case_id for r in seq.results]
+    assert [r.score for r in par.results] == [r.score for r in seq.results]
+    assert par.mean_score == seq.mean_score == 0.5
+
+
+def test_parallel_run_is_faster(in_flight):
+    started = _time.perf_counter()
+    run_suite(DEMO, SLOW)
+    sequential = _time.perf_counter() - started
+    started = _time.perf_counter()
+    run_suite(DEMO, SLOW, workers=6)
+    parallel = _time.perf_counter() - started
+    assert parallel < sequential * 0.6
+
+
+def test_parallel_run_records_errors():
+    result = run_suite(DEMO, "tests.test_runner:_crash_on_ceo", workers=4)
+    by_id = {r.case_id: r for r in result.results}
+    assert by_id["q002"].error == "target: RuntimeError: upstream 500"
+    assert by_id["q001"].score == 1.0
+    assert result.mean_score == pytest.approx(2.0 / 6.0)
+
+
+def test_parallel_run_calls_judge_per_rubric_case():
+    calls = []
+    lock = threading.Lock()
+
+    class CountingJudge(StubJudge):
+        def score(self, case, answer):
+            with lock:
+                calls.append(case.id)
+            return super().score(case, answer)
+
+    result = run_suite(DEMO, TARGET, judge=CountingJudge(1.0), workers=4)
+    assert sorted(calls) == ["q003", "q006"]
+    assert {r.case_id: r.judge_score for r in result.results}["q003"] == 1.0
+
+
+def test_parallel_run_skips_judge_only_cases(tmp_path):
+    suite = _write_suite(tmp_path, JUDGE_ONLY_SUITE)
+    result = run_suite(suite, TARGET, workers=4)
+    assert result.skipped == ["c2"]
+    assert [r.case_id for r in result.results] == ["c1"]
+
+
+def test_workers_must_be_positive():
+    with pytest.raises(ValueError, match="workers must be >= 1"):
+        run_suite(DEMO, TARGET, workers=0)

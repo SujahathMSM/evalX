@@ -26,6 +26,7 @@ this bridge.
 import json
 import math
 import os
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -42,6 +43,8 @@ _RETRY_AFTER_CAP_S = 60.0
 _RETRY_FALLBACK_S = 2.0
 
 _token: str | None = None
+# evalx --workers calls answer() from several threads: one token fetch, not N.
+_token_lock = threading.Lock()
 
 
 class AeroIntelError(RuntimeError):
@@ -119,9 +122,15 @@ def _fetch_token() -> str:
     return _token
 
 
+def _shared_token() -> str:
+    """The cached token, fetching it once even when threads race to it."""
+    with _token_lock:
+        return _token or _fetch_token()
+
+
 def answer(question: str) -> str:
     """Ask AeroIntel one question; return its answer (or refusal) as text."""
-    token = _token or (_fetch_token() if _credentials_configured() else None)
+    token = _token or (_shared_token() if _credentials_configured() else None)
     try:
         body = _post("/v1/query", {"question": question}, token=token)
     except AeroIntelError as exc:

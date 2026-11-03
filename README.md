@@ -10,7 +10,7 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-131_passing-brightgreen.svg" alt="Tests: 131 passing">
+  <img src="https://img.shields.io/badge/tests-143_passing-brightgreen.svg" alt="Tests: 143 passing">
 </p>
 
 <p align="center">
@@ -68,7 +68,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-131 tests (including end-to-end), `ruff` clean, CI green on every push.
+143 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Quickstart
 
@@ -87,6 +87,16 @@ Gate a run in CI:
 evalx run --suite datasets/demo/v1 --target examples.demo_app:answer --fail-under 0.8
 # exits 1: mean 0.500 < gate 0.8
 ```
+
+Speed up a big suite by running cases concurrently:
+
+```bash
+evalx run --suite datasets/aerointel/v1 --target examples.aerointel_app:answer --workers 8
+```
+
+Results keep dataset order and score exactly as a sequential run would. Keep
+`--workers` within your target's rate limit (the AeroIntel adapter retries
+HTTP 429 with `Retry-After`).
 
 ## How it works
 
@@ -154,7 +164,7 @@ flowchart LR
 
 | Command | What it does | Key options |
 | --- | --- | --- |
-| `evalx run` | Run a suite against a target, print the per-case table, save the run | `--suite`, `--target`, `--judge-model`, `--judge-temperature`, `--fail-under`, `--baseline`, `--fail-on-regression` (default 0.2), `--max-error-rate` (default 0.0), `--no-save` |
+| `evalx run` | Run a suite against a target, print the per-case table, save the run | `--suite`, `--target`, `--judge-model`, `--judge-temperature`, `--fail-under`, `--baseline`, `--fail-on-regression` (default 0.2), `--max-error-rate` (default 0.0), `--workers` (default 1), `--no-save` |
 | `evalx runs` | List stored runs, newest first, with mean and error/skipped counts | — |
 | `evalx compare A B` | Per-case delta table between two runs (refs: full id, unique prefix, `latest`, `latest-N`) | — |
 | `evalx baseline pin REF` | Pin a stored run as a named baseline (`--name`, default `stable`) | `--allow-errors` (required if the run contains error cases) |
@@ -297,7 +307,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 131 tests
+python -m pytest                      # 143 tests
 ruff check .
 ```
 

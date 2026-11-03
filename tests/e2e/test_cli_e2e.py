@@ -244,3 +244,22 @@ def test_unreachable_target_is_an_error_not_a_crash(evalx_cli, suite, e2e_env):
     assert "INFRA FAIL: 3/3 cases errored" in res.stdout
     assert "cannot reach an OpenAI-compatible server" in res.stdout
     assert "Traceback" not in res.stderr
+
+
+def test_parallel_judged_run_matches_sequential(evalx_cli, fake_openai, suite, e2e_env):
+    fake_openai.answers = dict(GOOD_ANSWERS, **{SKY: "Light scatters in the air."})
+    fake_openai.judge = _keyword_judge
+    seq = evalx_cli("run", "--suite", str(suite), "--target", TARGET, "--judge-model", JUDGE)
+    par = evalx_cli(
+        "run", "--suite", str(suite), "--target", TARGET, "--judge-model", JUDGE,
+        "--workers", "4",
+    )  # fmt: skip
+
+    assert seq.returncode == par.returncode == 0, par.stdout + par.stderr
+    assert len(fake_openai.target_calls()) == 8
+    assert len(fake_openai.judge_calls()) == 4
+    newer, older = store.list_runs(_store(e2e_env))
+    assert newer["mean_score"] == older["mean_score"] == pytest.approx(3.5 / 4)
+    for run in (newer, older):
+        details = store.load_case_details(run["run_id"], _store(e2e_env))
+        assert [d["case_id"] for d in details] == ["e1", "e2", "e3", "e4"]  # dataset order

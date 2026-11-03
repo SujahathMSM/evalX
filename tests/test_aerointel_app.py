@@ -203,3 +203,31 @@ def test_answer_401_refresh_still_works_with_real_post(monkeypatch, sleeps):
     assert answer("q") == "ok"
     assert auth_headers == ["Bearer stale", "Bearer fresh"]
     assert sleeps == []
+
+
+def test_concurrent_answers_fetch_the_token_once(monkeypatch):
+    """evalx --workers calls answer() from many threads at once."""
+    import threading
+    import time
+
+    monkeypatch.setenv("AEROINTEL_CLIENT_ID", "admin")
+    monkeypatch.setenv("AEROINTEL_CLIENT_SECRET", "s3cret")
+    calls = []
+    lock = threading.Lock()
+
+    def fake(path, payload, token=None):
+        with lock:
+            calls.append(path)
+        if path == "/auth/token":
+            time.sleep(0.05)  # widen the race window
+            return {"access_token": "tok-1"}
+        return {"refused": False, "answer": "a"}
+
+    monkeypatch.setattr(aerointel_app, "_post", fake)
+    threads = [threading.Thread(target=answer, args=(f"q{i}",)) for i in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert calls.count("/auth/token") == 1
+    assert calls.count("/v1/query") == 8
