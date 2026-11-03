@@ -66,7 +66,7 @@ def _completion(model: str, content: str) -> dict:
                 "finish_reason": "stop",
             }
         ],
-        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+        "usage": {"prompt_tokens": 120, "completion_tokens": 15, "total_tokens": 135},
     }
 
 

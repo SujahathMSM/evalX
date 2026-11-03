@@ -10,7 +10,7 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-143_passing-brightgreen.svg" alt="Tests: 143 passing">
+  <img src="https://img.shields.io/badge/tests-178_passing-brightgreen.svg" alt="Tests: 178 passing">
 </p>
 
 <p align="center">
@@ -45,6 +45,9 @@ LLM apps.
   (Ollama, vLLM, LM Studio, LiteLLM proxies, …) via the generic adapter.
 - **Local run store** — every run saved to one DuckDB file in your repo;
   compare any two runs case-by-case.
+- **Quality vs cost** — judge tokens and dollar cost are tracked per case
+  and per run (priced by LiteLLM, retries included); `evalx compare` shows
+  latency and cost changes next to the score deltas.
 - **Per-case regression gate** — pin a trusted run as a baseline; CI fails
   if *any single case* drops past your threshold, even when the mean
   improves. A guard refuses baselines from a different dataset.
@@ -68,7 +71,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-143 tests (including end-to-end), `ruff` clean, CI green on every push.
+178 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Quickstart
 
@@ -165,8 +168,8 @@ flowchart LR
 | Command | What it does | Key options |
 | --- | --- | --- |
 | `evalx run` | Run a suite against a target, print the per-case table, save the run | `--suite`, `--target`, `--judge-model`, `--judge-temperature`, `--fail-under`, `--baseline`, `--fail-on-regression` (default 0.2), `--max-error-rate` (default 0.0), `--workers` (default 1), `--no-save` |
-| `evalx runs` | List stored runs, newest first, with mean and error/skipped counts | — |
-| `evalx compare A B` | Per-case delta table between two runs (refs: full id, unique prefix, `latest`, `latest-N`) | — |
+| `evalx runs` | List stored runs, newest first, with mean, error/skipped counts, judge cost, wall time and workers | — |
+| `evalx compare A B` | Per-case score, latency and judge-cost deltas plus whole-run wall time between two runs (refs: full id, unique prefix, `latest`, `latest-N`) | — |
 | `evalx baseline pin REF` | Pin a stored run as a named baseline (`--name`, default `stable`) | `--allow-errors` (required if the run contains error cases) |
 | `evalx baseline list` | List pinned baselines | — |
 | `evalx dashboard` | Launch the Streamlit dashboard | `--port` (default 8501) |
@@ -238,6 +241,27 @@ Run references accept a full id, a unique prefix, `latest`, or `latest-N`.
 `--no-save` skips storing a throwaway run. The runs list shows each run's
 error and skipped counts (`–` for runs stored before those were tracked).
 
+Judged runs also record what the judge consumed: tokens and cost per case
+(retries included), totalled per run. `evalx run` prints the total, and
+`evalx compare` adds per-case latency and judge cost plus a summary, for
+example:
+
+```
+Mean: 0.500 -> 0.750 (+0.250) | 2 improved, 0 regressed, 4 unchanged
+Latency (mean per case): 1200 -> 800 ms (-33%)
+Judge cost: $0.0020 -> $0.0016 (-20%)
+Wall time (whole run): 7.4s -> 5.1s (-31%) | workers 1 -> 1
+```
+
+Every run also records its wall-clock time and `--workers`. Compare prints
+them on a `Wall time (whole run)` line and notes when the two runs used
+different worker counts: per-case latency includes queueing at the target,
+so a parallel run can show higher latency per case and still finish sooner.
+
+Cost comes from LiteLLM's price table. For a model it has no price for (a
+local or custom endpoint), tokens are still recorded and cost shows as `–`,
+never as a misleading $0.
+
 ## Baselines & the regression gate (M5)
 
 A mean-score gate can pass while one case craters. Pin a run you trust as a
@@ -307,7 +331,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 143 tests
+python -m pytest                      # 178 tests
 ruff check .
 ```
 
@@ -345,10 +369,17 @@ grading itself).
   `datasets/aerointel/v1`, adapter in `examples/aerointel_app.py`,
   screenshots in the Dashboard section above.
 
+- **Concurrent runs:** `evalx run --workers N` grades N cases at once on a
+  thread pool, with results in dataset order — identical to a sequential
+  run.
+- **Quality vs cost:** judge tokens and cost per case and per run, with
+  latency and cost deltas next to score deltas in `evalx compare` and the
+  dashboard.
+
 ## Roadmap
 
-- **Quality-vs-cost compare:** judge token cost and latency deltas next to
-  score deltas in `evalx compare`.
+- **Repeat runs:** `--repeats N` with per-case mean ± spread, so the
+  regression gate can tell real drops from model noise.
 
 ## License
 

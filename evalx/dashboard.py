@@ -55,6 +55,9 @@ def runs_frame(path=None) -> pd.DataFrame:
             "n_cases",
             "n_errors",
             "n_skipped",
+            "judge_cost_usd",
+            "duration_s",
+            "workers",
         ],
     )
 
@@ -85,13 +88,27 @@ def comparison_frame(ref_a: str, ref_b: str, path=None) -> tuple[pd.DataFrame, d
                 "score_b": c.score_b,
                 "delta": c.delta,
                 "trend": "▲" if c.delta > _EPS else "▼" if c.delta < -_EPS else "–",
+                "latency_a": c.latency_a,
+                "latency_b": c.latency_b,
+                "cost_a": c.cost_a,
+                "cost_b": c.cost_b,
             }
             for c in comp.cases
         ],
         # columns= matters: two runs from different suites share no case
         # ids, and an empty frame built without it has no columns at all --
         # delta_chart then died with KeyError: 'delta'.
-        columns=["case_id", "score_a", "score_b", "delta", "trend"],
+        columns=[
+            "case_id",
+            "score_a",
+            "score_b",
+            "delta",
+            "trend",
+            "latency_a",
+            "latency_b",
+            "cost_a",
+            "cost_b",
+        ],
     )
     summary = {
         "run_a": comp.run_a,
@@ -102,8 +119,35 @@ def comparison_frame(ref_a: str, ref_b: str, path=None) -> tuple[pd.DataFrame, d
         "improved": comp.improved,
         "regressed": comp.regressed,
         "unchanged": comp.unchanged,
+        "mean_latency_a": comp.mean_latency_a,
+        "mean_latency_b": comp.mean_latency_b,
+        "judge_cost_a": comp.judge_cost_a,
+        "judge_cost_b": comp.judge_cost_b,
+        "duration_a": comp.duration_a,
+        "duration_b": comp.duration_b,
+        "workers_a": comp.workers_a,
+        "workers_b": comp.workers_b,
     }
     return df, summary
+
+
+def _fmt_ms(value: float | None) -> str:
+    return _UNKNOWN if value is None else f"{value:.0f}"
+
+
+def _fmt_secs(value: float | None) -> str:
+    return _UNKNOWN if value is None else f"{value:.1f}s"
+
+
+def _fmt_usd(value: float | None) -> str:
+    return _UNKNOWN if value is None else f"${value:.4f}"
+
+
+def _fmt_delta(a: float | None, b: float | None, pattern: str) -> str | None:
+    """Metric delta text, or None (no delta arrow) when either side is unknown."""
+    if a is None or b is None:
+        return None
+    return pattern.format(b - a)
 
 
 def biggest_movers(ref_a: str, ref_b: str, path=None) -> dict:
@@ -323,6 +367,27 @@ def main() -> None:
         )
         m2.metric("Improved", s["improved"])
         m3.metric("Regressed", s["regressed"])
+        q1, q2, q3 = st.columns(3)
+        q1.metric(
+            "Latency A → B (mean ms)",
+            f"{_fmt_ms(s['mean_latency_a'])} → {_fmt_ms(s['mean_latency_b'])}",
+            delta=_fmt_delta(s["mean_latency_a"], s["mean_latency_b"], "{:+.0f} ms"),
+            delta_color="inverse",  # slower is worse
+        )
+        q2.metric(
+            "Judge cost A → B",
+            f"{_fmt_usd(s['judge_cost_a'])} → {_fmt_usd(s['judge_cost_b'])}",
+            delta=_fmt_delta(s["judge_cost_a"], s["judge_cost_b"], "{:+.4f} $"),
+            delta_color="inverse",  # pricier is worse
+        )
+        q3.metric(
+            "Wall time A → B",
+            f"{_fmt_secs(s['duration_a'])} → {_fmt_secs(s['duration_b'])}",
+            delta=_fmt_delta(s["duration_a"], s["duration_b"], "{:+.1f} s"),
+            delta_color="inverse",
+            help=f"workers {s['workers_a'] or _UNKNOWN} → {s['workers_b'] or _UNKNOWN}; "
+            "per-case latency includes queueing when workers > 1",
+        )
         if df.empty:
             st.info(
                 "These two runs share no cases, so there is nothing to compare "

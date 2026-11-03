@@ -104,7 +104,7 @@ def test_legacy_runs_have_null_counts_after_migration(isolated_store):
 
 def test_cli_runs_shows_error_and_skip_columns(isolated_store):
     store.save_run(_result(n_errors=2, skipped=["j1", "j2"]))
-    res = CliRunner().invoke(app, ["runs"])
+    res = CliRunner().invoke(app, ["runs"], env={"COLUMNS": "200"})
     assert res.exit_code == 0
     assert "Errors" in res.output
     assert "Skipped" in res.output
@@ -126,7 +126,7 @@ def test_cli_runs_highlights_nonzero_errors():
 
 def test_cli_runs_renders_legacy_counts_as_dash(isolated_store):
     _make_legacy_store()
-    res = CliRunner().invoke(app, ["runs"])
+    res = CliRunner().invoke(app, ["runs"], env={"COLUMNS": "200"})
     assert res.exit_code == 0
     row = next(line for line in res.output.splitlines() if "old-run" in line)
     cells = table_cells(row)
