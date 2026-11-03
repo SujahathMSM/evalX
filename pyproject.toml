@@ -17,6 +17,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff==0.16.9", "streamlit", "pandas"]
+# Browser for the dashboard end-to-end test: also run `playwright install chromium`.
+e2e = ["playwright==1.63.0"]
 
 [project.scripts]
 evalx = "evalx.cli:app"
@@ -27,6 +29,10 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "e2e: end-to-end through the real CLI process, HTTP and browser (local fakes, no keys)",
+    "live: calls a real LLM provider; skipped unless its API key is set",
+]
 
 [tool.ruff]
 line-length = 100

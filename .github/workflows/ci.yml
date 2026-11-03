@@ -13,12 +13,17 @@ jobs:
           python-version: "3.11"
 
       - name: Install
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e ".[dev,e2e]"
+          python -m playwright install --with-deps chromium
 
       - name: Lint
         run: ruff check .
 
-      - name: Tests
+      - name: Tests (unit + end-to-end)
+        # tests/e2e drives the real CLI against a local fake LLM server and
+        # renders the dashboard in headless Chromium. Live-provider tests
+        # (-m live) skip here: CI holds no API key.
         run: python -m pytest -q
 
       - name: Eval gate (demo suite)

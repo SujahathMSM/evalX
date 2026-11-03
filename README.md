@@ -10,7 +10,7 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-119_passing-brightgreen.svg" alt="Tests: 119 passing">
+  <img src="https://img.shields.io/badge/tests-131_passing-brightgreen.svg" alt="Tests: 131 passing">
 </p>
 
 <p align="center">
@@ -68,7 +68,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-119 tests, `ruff` clean, CI green on every push.
+131 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Quickstart
 
@@ -295,10 +295,18 @@ the top of this README.*
 ## Development
 
 ```bash
-pip install -e ".[dev]"   # adds pytest, ruff, streamlit, pandas
-python -m pytest          # 119 tests
+pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
+python -m playwright install chromium # browser for the dashboard E2E test
+python -m pytest                      # 131 tests
 ruff check .
 ```
+
+`tests/e2e/` tests evalX end to end the way a user runs it: a real `evalx`
+process grades the OpenAI-compatible adapter against a local fake LLM server
+(real HTTP, real LiteLLM judge calls, real DuckDB store, real exit codes),
+and the dashboard is rendered in headless Chromium. No API key needed; the
+dashboard test skips if Playwright isn't installed. One opt-in check hits a
+real judge model: `ANTHROPIC_API_KEY=... python -m pytest -m live`.
 
 CI (`.github/workflows/ci.yml`) runs the same lint + tests on every push and
 pull request, then gates the deterministic demo suite at
