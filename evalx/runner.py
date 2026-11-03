@@ -52,12 +52,15 @@ def _run_case(case: TestCase, answer_fn, judge) -> CaseResult:
     judge_score: float | None = None
     judge_reason: str | None = None
     error: str | None = None
+    usage = None
     if judge is not None and case.judge is not None:
         try:
             verdict = judge.score(case, answer)
             judge_score, judge_reason = verdict.score, verdict.reason
+            usage = getattr(verdict, "usage", None)
         except Exception as exc:  # noqa: BLE001 - recorded on the case
             error = _error_text("judge", exc)
+            usage = getattr(exc, "usage", None)  # failed attempts still cost
 
     return CaseResult(
         case_id=case.id,
@@ -72,6 +75,9 @@ def _run_case(case: TestCase, answer_fn, judge) -> CaseResult:
         score=0.0 if error else _combine_score(case, code_score, judge_score),
         latency_ms=latency_ms,
         error=error,
+        judge_prompt_tokens=getattr(usage, "prompt_tokens", None),
+        judge_completion_tokens=getattr(usage, "completion_tokens", None),
+        judge_cost_usd=getattr(usage, "cost_usd", None),
     )
 
 

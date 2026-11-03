@@ -16,6 +16,7 @@ from evalx.store import (
     load_run_meta,
     pin_baseline,
     regression_against_baseline,
+    run_judge_usage,
     save_run,
 )
 
@@ -77,6 +78,21 @@ def version() -> None:
     console.print(__version__)
 
 
+def _ms(value: float | None) -> str:
+    return "–" if value is None else f"{value:.0f}"
+
+
+def _usd(value: float | None) -> str:
+    """Dollar amount; "–" when unknown (not judged, or the model has no price)."""
+    return "–" if value is None else f"${value:.4f}"
+
+
+def _pct_change(a: float | None, b: float | None) -> str:
+    if a is None or b is None or a == 0:
+        return ""
+    return f" ({(b - a) / a:+.0%})"
+
+
 def _count_cell(value: int | None, highlight: bool = False) -> str:
     """A stored per-run count: NULL (run saved before counts existed) is unknown."""
     if value is None:
@@ -100,6 +116,7 @@ def list_runs_cmd() -> None:
     table.add_column("cases", justify="right")
     table.add_column("Errors", justify="right")
     table.add_column("Skipped", justify="right")
+    table.add_column("judge $", justify="right")
     table.add_column("created")
     for r in runs:
         table.add_row(
@@ -109,6 +126,7 @@ def list_runs_cmd() -> None:
             str(r["n_cases"]),
             _count_cell(r["n_errors"], highlight=True),
             _count_cell(r["n_skipped"]),
+            _usd(r["judge_cost_usd"]),
             str(r["created_at"]),
         )
     console.print(table)
@@ -121,22 +139,45 @@ def compare(
 ) -> None:
     """Compare two stored runs case by case."""
     comp = compare_runs(ref_a, ref_b)
+    show_cost = comp.judge_cost_a is not None or comp.judge_cost_b is not None
     table = Table(title=f"evalx compare: {comp.run_a} -> {comp.run_b}")
     table.add_column("case", style="cyan")
     table.add_column("a", justify="right")
     table.add_column("b", justify="right")
     table.add_column("delta", justify="right")
+    table.add_column("ms a", justify="right")
+    table.add_column("ms b", justify="right")
+    if show_cost:
+        table.add_column("judge $ a", justify="right")
+        table.add_column("judge $ b", justify="right")
     for c in comp.cases:
         style = "green" if c.delta > 0 else "red" if c.delta < 0 else "dim"
-        table.add_row(
-            c.case_id, f"{c.score_a:.2f}", f"{c.score_b:.2f}", f"{c.delta:+.2f}", style=style
-        )
+        row = [
+            c.case_id,
+            f"{c.score_a:.2f}",
+            f"{c.score_b:.2f}",
+            f"{c.delta:+.2f}",
+            _ms(c.latency_a),
+            _ms(c.latency_b),
+        ]
+        if show_cost:
+            row += [_usd(c.cost_a), _usd(c.cost_b)]
+        table.add_row(*row, style=style)
     console.print(table)
     console.print(
         f"Mean: {comp.mean_a:.3f} -> {comp.mean_b:.3f} "
         f"([bold]{comp.delta:+.3f}[/bold]) | "
         f"{comp.improved} improved, {comp.regressed} regressed, {comp.unchanged} unchanged"
     )
+    console.print(
+        f"Latency (mean per case): {_ms(comp.mean_latency_a)} -> {_ms(comp.mean_latency_b)} ms"
+        f"{_pct_change(comp.mean_latency_a, comp.mean_latency_b)}"
+    )
+    if show_cost:
+        console.print(
+            f"Judge cost: {_usd(comp.judge_cost_a)} -> {_usd(comp.judge_cost_b)}"
+            f"{_pct_change(comp.judge_cost_a, comp.judge_cost_b)}"
+        )
 
 
 @app.command()
@@ -239,6 +280,15 @@ def run(
             f"(no --judge-model): {', '.join(result.skipped)}[/yellow]"
         )
     console.print(f"\nMean score: [bold]{result.mean_score:.3f}[/bold] over {result.n_cases} cases")
+    if judge:
+        judge_tokens, judge_cost = run_judge_usage(result)
+        if judge_tokens is not None or judge_cost is not None:
+            cost = (
+                _usd(judge_cost)
+                if judge_cost is not None
+                else f"cost unknown (no LiteLLM price for {judge_model})"
+            )
+            console.print(f"Judge usage: {judge_tokens or 0:,} tokens, {cost}")
 
     failed = False
     n_graded = len(result.results)

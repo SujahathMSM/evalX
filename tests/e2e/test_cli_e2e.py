@@ -263,3 +263,30 @@ def test_parallel_judged_run_matches_sequential(evalx_cli, fake_openai, suite, e
     for run in (newer, older):
         details = store.load_case_details(run["run_id"], _store(e2e_env))
         assert [d["case_id"] for d in details] == ["e1", "e2", "e3", "e4"]  # dataset order
+
+
+def test_judge_cost_tracked_end_to_end(evalx_cli, fake_openai, suite, e2e_env):
+    """Real LiteLLM prices a known model from the usage the server reports."""
+    fake_openai.answers = dict(GOOD_ANSWERS)
+    fake_openai.judge = _keyword_judge
+
+    priced = evalx_cli(
+        "run", "--suite", str(suite), "--target", TARGET, "--judge-model", "openai/gpt-4o-mini"
+    )
+    assert priced.returncode == 0, priced.stdout + priced.stderr
+    # Two rubric cases x (120 prompt + 15 completion) tokens.
+    assert "Judge usage: 270 tokens, $0." in priced.stdout
+    (run,) = store.list_runs(_store(e2e_env))
+    assert run["judge_tokens"] == 270
+    assert run["judge_cost_usd"] > 0
+
+    unpriced = evalx_cli("run", "--suite", str(suite), "--target", TARGET, "--judge-model", JUDGE)
+    assert "Judge usage: 270 tokens, cost unknown (no LiteLLM price for openai/fake-judge)" in (
+        unpriced.stdout
+    )
+
+    cmp = evalx_cli("compare", "latest-1", "latest")
+    assert cmp.returncode == 0, cmp.stdout + cmp.stderr
+    assert "Latency (mean per case):" in cmp.stdout
+    assert "Judge cost: $0." in cmp.stdout  # A priced, B unknown
+    assert "-> –" in cmp.stdout

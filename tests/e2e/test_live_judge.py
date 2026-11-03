@@ -40,3 +40,13 @@ def test_live_judge_passes_a_correct_answer():
 def test_live_judge_fails_a_wrong_answer():
     verdict = LLMJudge(MODEL).score(CASE, "Because the sky reflects the colour of the ocean.")
     assert verdict.score <= 0.3, verdict.reason
+
+
+def test_live_judge_reports_usage_and_cost():
+    verdict = LLMJudge(MODEL).score(CASE, "Rayleigh scattering.")
+    assert verdict.usage is not None
+    assert verdict.usage.prompt_tokens and verdict.usage.prompt_tokens > 0
+    assert verdict.usage.completion_tokens and verdict.usage.completion_tokens > 0
+    # LiteLLM prices Anthropic models; a few hundred tokens cost well under a cent.
+    assert verdict.usage.cost_usd is not None
+    assert 0 < verdict.usage.cost_usd < 0.01

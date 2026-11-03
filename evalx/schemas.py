@@ -57,6 +57,11 @@ class CaseResult(BaseModel):
     # Set when the target or the judge raised on this case. The case still
     # counts in the mean with score 0.0, so a crashing app can't pass a gate.
     error: str | None = None
+    # What the LLM judge consumed on this case (retries included). None when
+    # the judge wasn't called, or the provider/model didn't report it.
+    judge_prompt_tokens: int | None = None
+    judge_completion_tokens: int | None = None
+    judge_cost_usd: float | None = None
 
 
 class RunResult(BaseModel):

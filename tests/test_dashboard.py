@@ -94,7 +94,7 @@ def test_comparison_frame_no_shared_cases(isolated_store):
     store.save_run(_fake_result([0.0, 1.0], prefix="a"))
     df, summary = dashboard.comparison_frame("latest-1", "latest")
     assert df.empty
-    assert list(df.columns) == ["case_id", "score_a", "score_b", "delta", "trend"]
+    assert list(df.columns)[:5] == ["case_id", "score_a", "score_b", "delta", "trend"]
     assert (summary["improved"], summary["regressed"], summary["unchanged"]) == (0, 0, 0)
 
 
