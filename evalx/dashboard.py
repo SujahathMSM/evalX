@@ -56,6 +56,8 @@ def runs_frame(path=None) -> pd.DataFrame:
             "n_errors",
             "n_skipped",
             "judge_cost_usd",
+            "duration_s",
+            "workers",
         ],
     )
 
@@ -121,12 +123,20 @@ def comparison_frame(ref_a: str, ref_b: str, path=None) -> tuple[pd.DataFrame, d
         "mean_latency_b": comp.mean_latency_b,
         "judge_cost_a": comp.judge_cost_a,
         "judge_cost_b": comp.judge_cost_b,
+        "duration_a": comp.duration_a,
+        "duration_b": comp.duration_b,
+        "workers_a": comp.workers_a,
+        "workers_b": comp.workers_b,
     }
     return df, summary
 
 
 def _fmt_ms(value: float | None) -> str:
     return _UNKNOWN if value is None else f"{value:.0f}"
+
+
+def _fmt_secs(value: float | None) -> str:
+    return _UNKNOWN if value is None else f"{value:.1f}s"
 
 
 def _fmt_usd(value: float | None) -> str:
@@ -357,7 +367,7 @@ def main() -> None:
         )
         m2.metric("Improved", s["improved"])
         m3.metric("Regressed", s["regressed"])
-        q1, q2 = st.columns(2)
+        q1, q2, q3 = st.columns(3)
         q1.metric(
             "Latency A → B (mean ms)",
             f"{_fmt_ms(s['mean_latency_a'])} → {_fmt_ms(s['mean_latency_b'])}",
@@ -369,6 +379,14 @@ def main() -> None:
             f"{_fmt_usd(s['judge_cost_a'])} → {_fmt_usd(s['judge_cost_b'])}",
             delta=_fmt_delta(s["judge_cost_a"], s["judge_cost_b"], "{:+.4f} $"),
             delta_color="inverse",  # pricier is worse
+        )
+        q3.metric(
+            "Wall time A → B",
+            f"{_fmt_secs(s['duration_a'])} → {_fmt_secs(s['duration_b'])}",
+            delta=_fmt_delta(s["duration_a"], s["duration_b"], "{:+.1f} s"),
+            delta_color="inverse",
+            help=f"workers {s['workers_a'] or _UNKNOWN} → {s['workers_b'] or _UNKNOWN}; "
+            "per-case latency includes queueing when workers > 1",
         )
         if df.empty:
             st.info(

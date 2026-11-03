@@ -75,4 +75,8 @@ class RunResult(BaseModel):
     # Cases that only have a judge rubric, run without a judge: nothing could
     # score them, so they are left out of ``results`` and the mean.
     skipped: list[str] = []
+    # Wall-clock time of the whole run and the concurrency it ran with: mean
+    # per-case latency rises with --workers even when the run gets faster.
+    duration_s: float | None = None
+    workers: int | None = None
     run_id: str | None = None  # assigned when the run is saved to the store

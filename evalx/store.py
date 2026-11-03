@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS runs (
     n_errors INTEGER,
     n_skipped INTEGER,
     judge_tokens INTEGER,
-    judge_cost_usd DOUBLE
+    judge_cost_usd DOUBLE,
+    duration_s DOUBLE,
+    workers INTEGER
 )
 """
 
@@ -76,6 +78,8 @@ _RUN_EXTRA_COLUMNS = (
     ("n_skipped", "INTEGER"),
     ("judge_tokens", "INTEGER"),
     ("judge_cost_usd", "DOUBLE"),
+    ("duration_s", "DOUBLE"),
+    ("workers", "INTEGER"),
 )
 
 
@@ -137,8 +141,8 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
         judge_tokens, judge_cost = run_judge_usage(result)
         con.execute(
             "INSERT INTO runs (run_id, suite, target, judge_model, mean_score, n_cases,"
-            " created_at, n_errors, n_skipped, judge_tokens, judge_cost_usd)"
-            " VALUES (?, ?, ?, ?, ?, ?, now(), ?, ?, ?, ?)",
+            " created_at, n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s,"
+            " workers) VALUES (?, ?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?)",
             [
                 run_id,
                 result.suite,
@@ -150,6 +154,8 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
                 len(result.skipped),
                 judge_tokens,
                 judge_cost,
+                result.duration_s,
+                result.workers,
             ],
         )
         con.executemany(
@@ -193,6 +199,8 @@ _RUN_META_COLUMNS = [
     "n_skipped",
     "judge_tokens",
     "judge_cost_usd",
+    "duration_s",
+    "workers",
 ]
 
 
@@ -202,7 +210,7 @@ def list_runs(path: Path | None = None) -> list[dict]:
     try:
         rows = con.execute(
             "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
-            " n_errors, n_skipped, judge_tokens, judge_cost_usd"
+            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers"
             " FROM runs ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -240,7 +248,7 @@ def load_run_meta(run_id: str, path: Path | None = None) -> dict:
     try:
         row = con.execute(
             "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
-            " n_errors, n_skipped, judge_tokens, judge_cost_usd"
+            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers"
             " FROM runs WHERE run_id = ?",
             [run_id],
         ).fetchone()
@@ -318,6 +326,12 @@ class RunComparison(BaseModel):
     mean_latency_b: float | None = None
     judge_cost_a: float | None = None  # None when no shared case was priced
     judge_cost_b: float | None = None
+    # Whole-run wall time and concurrency (None for runs saved before these
+    # were recorded). Unlike the latency means these cover every case.
+    duration_a: float | None = None
+    duration_b: float | None = None
+    workers_a: int | None = None
+    workers_b: int | None = None
 
 
 def count_error_cases(run_id: str, path: Path | None = None) -> int:
@@ -388,6 +402,10 @@ def compare_runs(ref_a: str, ref_b: str, path: Path | None = None) -> RunCompari
         mean_latency_b=_mean([c.latency_b for c in cases]),
         judge_cost_a=_known_sum([c.cost_a for c in cases]),
         judge_cost_b=_known_sum([c.cost_b for c in cases]),
+        duration_a=meta_a["duration_s"],
+        duration_b=meta_b["duration_s"],
+        workers_a=meta_a["workers"],
+        workers_b=meta_b["workers"],
     )
 
 

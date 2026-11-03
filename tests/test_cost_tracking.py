@@ -326,7 +326,7 @@ def test_cli_run_without_judge_prints_no_usage(isolated_store):
 def test_cli_runs_shows_judge_cost(isolated_store):
     store.save_run(_result([0.0015]))
     store.save_run(_result([None], prefix="x"))
-    res = CliRunner().invoke(app, ["runs"])
+    res = CliRunner().invoke(app, ["runs"], env={"COLUMNS": "200"})
     assert res.exit_code == 0
     assert "judge $" in res.output
     rows = [line for line in res.output.splitlines() if " s " in line]
@@ -356,3 +356,83 @@ def test_dashboard_metric_formatters():
     assert dashboard._fmt_ms(12.6) == "13"
     assert dashboard._fmt_delta(None, 1.0, "{:+.0f}") is None
     assert dashboard._fmt_delta(100.0, 50.0, "{:+.0f} ms") == "-50 ms"
+
+
+# --- wall time and workers --------------------------------------------------
+
+
+def test_run_records_duration_and_workers():
+    seq = run_suite(DEMO, TARGET)
+    par = run_suite(DEMO, TARGET, workers=3)
+    assert seq.duration_s is not None and seq.duration_s > 0
+    assert (seq.workers, par.workers) == (1, 3)
+
+
+def _timed(duration: float, workers: int) -> RunResult:
+    return _result([None]).model_copy(update={"duration_s": duration, "workers": workers})
+
+
+def test_store_round_trips_duration_and_workers(isolated_store):
+    run_id = store.save_run(_timed(236.1, 4))
+    meta = store.load_run_meta(run_id)
+    assert (meta["duration_s"], meta["workers"]) == (236.1, 4)
+
+
+def test_compare_reports_wall_time_and_workers(isolated_store):
+    store.save_run(_timed(264.0, 1))
+    store.save_run(_timed(236.0, 4))
+    comp = store.compare_runs("latest-1", "latest")
+    assert (comp.duration_a, comp.duration_b) == (264.0, 236.0)
+    assert (comp.workers_a, comp.workers_b) == (1, 4)
+
+
+def test_cli_compare_explains_differing_workers(isolated_store):
+    store.save_run(_timed(264.0, 1))
+    store.save_run(_timed(236.0, 4))
+    res = CliRunner().invoke(app, ["compare", "latest-1", "latest"])
+    out = _flat(res.output)
+    assert "Wall time (whole run): 264.0s -> 236.0s (-11%) | workers 1 -> 4" in out
+    assert "the runs used different --workers" in out
+
+
+def test_cli_compare_no_workers_note_when_equal(isolated_store):
+    store.save_run(_timed(10.0, 2))
+    store.save_run(_timed(12.0, 2))
+    res = CliRunner().invoke(app, ["compare", "latest-1", "latest"])
+    assert "Wall time (whole run): 10.0s -> 12.0s (+20%) | workers 2 -> 2" in _flat(res.output)
+    assert "different --workers" not in res.output
+
+
+def test_cli_compare_legacy_runs_show_unknown_wall_time(isolated_store):
+    store.save_run(_result([None]))  # duration/workers not set: like an old run
+    store.save_run(_timed(5.0, 1))
+    res = CliRunner().invoke(app, ["compare", "latest-1", "latest"])
+    out = _flat(res.output)
+    assert "Wall time (whole run): – -> 5.0s | workers – -> 1" in out
+    assert "different --workers" not in out
+
+
+def test_cli_run_prints_wall_time(isolated_store):
+    one = CliRunner().invoke(app, ["run", "--suite", DEMO, "--target", TARGET, "--no-save"])
+    many = CliRunner().invoke(
+        app, ["run", "--suite", DEMO, "--target", TARGET, "--no-save", "--workers", "3"]
+    )
+    assert "with 1 worker" in one.output and "workers" not in one.output.split("Wall time")[1]
+    assert "with 3 workers" in many.output
+
+
+def test_cli_runs_shows_wall_time_and_workers(isolated_store):
+    store.save_run(_timed(236.1, 4))
+    store.save_run(_result([None], prefix="x"))
+    res = CliRunner().invoke(app, ["runs"], env={"COLUMNS": "200"})
+    rows = [table_cells(line) for line in res.output.splitlines() if " s " in line]
+    assert sorted((r[7], r[8]) for r in rows) == [("236.1s", "4"), ("–", "–")]
+
+
+def test_dashboard_compare_summary_has_wall_time(isolated_store):
+    store.save_run(_timed(264.0, 1))
+    store.save_run(_timed(236.0, 4))
+    _, summary = dashboard.comparison_frame("latest-1", "latest")
+    assert (summary["duration_a"], summary["workers_b"]) == (264.0, 4)
+    assert {"duration_s", "workers"} <= set(dashboard.runs_frame().columns)
+    assert dashboard._fmt_secs(None) == "–"

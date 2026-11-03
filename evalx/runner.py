@@ -104,6 +104,7 @@ def run_suite(suite: str | Path, target: str, judge=None, workers: int = 1) -> R
     cases = load_dataset(suite)
     answer_fn = resolve_target(target)
 
+    started = time.perf_counter()
     skipped = [c.id for c in cases if not c.checks and judge is None]
     to_run = [c for c in cases if c.checks or judge is not None]
 
@@ -121,4 +122,6 @@ def run_suite(suite: str | Path, target: str, judge=None, workers: int = 1) -> R
         mean_score=mean_score,
         results=results,
         skipped=skipped,
+        duration_s=time.perf_counter() - started,
+        workers=workers,
     )

@@ -82,6 +82,15 @@ def _ms(value: float | None) -> str:
     return "–" if value is None else f"{value:.0f}"
 
 
+def _created(value) -> str:
+    """Run timestamp to the minute: the table is wide enough already."""
+    return value.strftime("%Y-%m-%d %H:%M") if hasattr(value, "strftime") else str(value)
+
+
+def _secs(value: float | None) -> str:
+    return "–" if value is None else f"{value:.1f}s"
+
+
 def _usd(value: float | None) -> str:
     """Dollar amount; "–" when unknown (not judged, or the model has no price)."""
     return "–" if value is None else f"${value:.4f}"
@@ -117,6 +126,8 @@ def list_runs_cmd() -> None:
     table.add_column("Errors", justify="right")
     table.add_column("Skipped", justify="right")
     table.add_column("judge $", justify="right")
+    table.add_column("wall", justify="right")
+    table.add_column("workers", justify="right")
     table.add_column("created")
     for r in runs:
         table.add_row(
@@ -127,7 +138,9 @@ def list_runs_cmd() -> None:
             _count_cell(r["n_errors"], highlight=True),
             _count_cell(r["n_skipped"]),
             _usd(r["judge_cost_usd"]),
-            str(r["created_at"]),
+            _secs(r["duration_s"]),
+            _count_cell(r["workers"]),
+            _created(r["created_at"]),
         )
     console.print(table)
 
@@ -177,6 +190,20 @@ def compare(
         console.print(
             f"Judge cost: {_usd(comp.judge_cost_a)} -> {_usd(comp.judge_cost_b)}"
             f"{_pct_change(comp.judge_cost_a, comp.judge_cost_b)}"
+        )
+    console.print(
+        f"Wall time (whole run): {_secs(comp.duration_a)} -> {_secs(comp.duration_b)}"
+        f"{_pct_change(comp.duration_a, comp.duration_b)}"
+        f" | workers {_count_cell(comp.workers_a)} -> {_count_cell(comp.workers_b)}"
+    )
+    if (
+        comp.workers_a is not None
+        and comp.workers_b is not None
+        and comp.workers_a != comp.workers_b
+    ):
+        console.print(
+            "[yellow]note: the runs used different --workers; per-case latency "
+            "includes queueing at the target, so compare wall time for speed[/yellow]"
         )
 
 
@@ -280,6 +307,10 @@ def run(
             f"(no --judge-model): {', '.join(result.skipped)}[/yellow]"
         )
     console.print(f"\nMean score: [bold]{result.mean_score:.3f}[/bold] over {result.n_cases} cases")
+    console.print(
+        f"Wall time: {_secs(result.duration_s)} with {result.workers} worker"
+        f"{'' if result.workers == 1 else 's'}"
+    )
     if judge:
         judge_tokens, judge_cost = run_judge_usage(result)
         if judge_tokens is not None or judge_cost is not None:
