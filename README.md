@@ -10,12 +10,13 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-194_passing-brightgreen.svg" alt="Tests: 194 passing">
+  <img src="https://img.shields.io/badge/tests-223_passing-brightgreen.svg" alt="Tests: 223 passing">
 </p>
 
 <p align="center">
   <a href="#quickstart">Quickstart</a> ·
   <a href="#features">Features</a> ·
+  <a href="#check-types">Check types</a> ·
   <a href="#cli-reference">CLI reference</a> ·
   <a href="#dashboard">Dashboard</a> ·
   <a href="#milestones">Milestones</a>
@@ -36,7 +37,8 @@ LLM apps.
 ## Features
 
 - **Golden datasets in YAML** — hand-written cases with weighted code checks
-  (`exact_match`, `contains`, `regex`) and optional LLM-judge rubrics.
+  (`exact_match`, `contains`, `not_contains`, `regex`, `numeric`,
+  `max_length`, `json_schema`) and optional LLM-judge rubrics.
 - **LLM-as-judge with bias guards** — answers scored alone (no position
   bias), an anti-fluff system prompt (no verbosity bias), verdicts validated
   as Pydantic JSON (retry once, then raise — never an invented score).
@@ -71,7 +73,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-194 tests (including end-to-end), `ruff` clean, CI green on every push.
+223 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Quickstart
 
@@ -177,6 +179,36 @@ flowchart LR
     class MEAN,SAVE,TABLE,CMP out;
 ```
 
+## Check types
+
+Each case lists weighted checks; a case's code score is their weighted mean.
+Checks are validated when the dataset loads, so a typo fails fast instead of
+silently scoring 0.
+
+| Type | Passes when | `expected` |
+| --- | --- | --- |
+| `exact_match` | the answer equals the text (surrounding whitespace ignored) | text |
+| `contains` | the text appears in the answer (case-insensitive) | text |
+| `not_contains` | the text does **not** appear — a banned phrase, a hallucinated name, a leaked secret | text |
+| `regex` | the pattern matches anywhere in the answer | Python regex |
+| `numeric` | any number in the answer is within `tolerance` (default 0) of the value; reads `1,200`, `-3`, `.5`, `40psi` | number |
+| `max_length` | the answer has at most this many characters | positive integer |
+| `json_schema` | the answer is JSON that validates against the schema (one Markdown code fence allowed) | JSON Schema, as a YAML mapping |
+
+```yaml
+- id: torque-json
+  question: "Give the torque for an AN3 bolt as JSON."
+  checks:
+    - type: json_schema
+      expected:
+        type: object
+        required: [part, torque_in_lb]
+        properties: {torque_in_lb: {type: number}}
+    - {type: numeric, expected: 25, tolerance: 3}
+    - {type: not_contains, expected: "ft-lb"}   # wrong unit
+    - {type: max_length, expected: 200, weight: 0.5}
+```
+
 ## CLI reference
 
 | Command | What it does | Key options |
@@ -194,7 +226,8 @@ flowchart LR
 - `evalx/schemas.py` — Pydantic models: `TestCase`, `Check`, `JudgeSpec`,
   `CaseResult`, `RunResult`
 - `evalx/datasets.py` — load + validate golden datasets from YAML
-- `evalx/scorers.py` — deterministic scorers: `exact_match`, `contains`, `regex`
+- `evalx/scorers.py` — deterministic scorers: `exact_match`, `contains`,
+  `not_contains`, `regex`, `numeric`, `max_length`, `json_schema`
 - `evalx/judge.py` — LLM-as-judge via LiteLLM with built-in bias guards:
   answers scored alone (no position bias), anti-fluff system prompt
   (no verbosity bias), JSON verdicts validated with Pydantic (retry once,
@@ -345,7 +378,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 194 tests
+python -m pytest                      # 223 tests
 ruff check .
 ```
 
@@ -393,10 +426,13 @@ grading itself).
 - **Repeat runs:** `--repeats N` scores every case N times — mean score,
   per-case spread, noisy cases flagged in the run and on regressions.
 
+- **More check types:** `not_contains`, `numeric` (with tolerance),
+  `max_length` and `json_schema`, all validated at dataset load.
+
 ## Roadmap
 
-- **More scorers:** `not_contains`, JSON-schema validity, numeric
-  tolerance, max length.
+- **Report formats:** `--output junit|json|markdown` for CI test reports
+  and PR comments.
 
 ## License
 
