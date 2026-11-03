@@ -81,7 +81,49 @@ def _run_case(case: TestCase, answer_fn, judge) -> CaseResult:
     )
 
 
-def run_suite(suite: str | Path, target: str, judge=None, workers: int = 1) -> RunResult:
+def _known_sum(values):
+    known = [v for v in values if v is not None]
+    return sum(known) if known else None
+
+
+def _aggregate(attempts: list[CaseResult]) -> CaseResult:
+    """Fold N attempts at one case into one CaseResult.
+
+    ``score`` is the mean attempt score and ``attempt_scores`` keeps them
+    all. The detail you debug -- answer, checks, judge reason -- comes from
+    the lowest-scoring attempt: the bad answer, not a lucky one. Judge score
+    and latency are means; judge tokens and cost are totals. If any attempt
+    errored the case carries the error (with the count), and that attempt
+    still scored 0.0 in the mean.
+    """
+    scores = [a.score for a in attempts]
+    if len(attempts) == 1:
+        return attempts[0].model_copy(update={"attempt_scores": scores})
+    worst = min(attempts, key=lambda a: a.score)
+    errored = [a for a in attempts if a.error is not None]
+    judge_scores = [a.judge_score for a in attempts if a.judge_score is not None]
+    error = None
+    if errored:
+        error = f"{len(errored)}/{len(attempts)} attempts errored; first: {errored[0].error}"
+    return worst.model_copy(
+        update={
+            "score": sum(scores) / len(scores),
+            "attempt_scores": scores,
+            "judge_score": sum(judge_scores) / len(judge_scores) if judge_scores else None,
+            "latency_ms": sum(a.latency_ms for a in attempts) / len(attempts),
+            "error": error,
+            "judge_prompt_tokens": _known_sum([a.judge_prompt_tokens for a in attempts]),
+            "judge_completion_tokens": _known_sum(
+                [a.judge_completion_tokens for a in attempts]
+            ),
+            "judge_cost_usd": _known_sum([a.judge_cost_usd for a in attempts]),
+        }
+    )
+
+
+def run_suite(
+    suite: str | Path, target: str, judge=None, workers: int = 1, repeats: int = 1
+) -> RunResult:
     """Run all cases in a dataset against a target app. Returns the run result.
 
     ``judge`` is optional and duck-typed: any object with
@@ -98,22 +140,33 @@ def run_suite(suite: str | Path, target: str, judge=None, workers: int = 1) -> R
     then be safe to call from several threads. Results keep dataset order
     whatever order the cases finish in, so a parallel run reports exactly
     like a sequential one.
+
+    ``repeats`` > 1 asks every case that many times and scores each attempt;
+    see _aggregate for how attempts fold into one result. LLM answers vary,
+    so the spread across attempts shows how much of a score is noise.
     """
     if workers < 1:
         raise ValueError(f"workers must be >= 1, got {workers}")
+    if repeats < 1:
+        raise ValueError(f"repeats must be >= 1, got {repeats}")
     cases = load_dataset(suite)
     answer_fn = resolve_target(target)
 
     started = time.perf_counter()
     skipped = [c.id for c in cases if not c.checks and judge is None]
     to_run = [c for c in cases if c.checks or judge is not None]
+    # Every (case, attempt) is an independent job, so attempts parallelise too.
+    jobs = [case for case in to_run for _ in range(repeats)]
 
-    if workers == 1 or len(to_run) <= 1:
-        results = [_run_case(case, answer_fn, judge) for case in to_run]
+    if workers == 1 or len(jobs) <= 1:
+        attempts = [_run_case(case, answer_fn, judge) for case in jobs]
     else:
         with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="evalx") as pool:
-            results = list(pool.map(lambda case: _run_case(case, answer_fn, judge), to_run))
+            attempts = list(pool.map(lambda case: _run_case(case, answer_fn, judge), jobs))
 
+    results = [
+        _aggregate(attempts[i * repeats : (i + 1) * repeats]) for i in range(len(to_run))
+    ]
     mean_score = sum(r.score for r in results) / len(results) if results else 0.0
     return RunResult(
         suite=str(suite),
@@ -124,4 +177,5 @@ def run_suite(suite: str | Path, target: str, judge=None, workers: int = 1) -> R
         skipped=skipped,
         duration_s=time.perf_counter() - started,
         workers=workers,
+        repeats=repeats,
     )

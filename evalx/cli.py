@@ -13,6 +13,7 @@ from evalx.store import (
     judged_case_ids,
     list_baselines,
     list_runs,
+    load_case_spreads,
     load_run_meta,
     pin_baseline,
     regression_against_baseline,
@@ -100,6 +101,20 @@ def _pct_change(a: float | None, b: float | None) -> str:
     if a is None or b is None or a == 0:
         return ""
     return f" ({(b - a) / a:+.0%})"
+
+
+def _noise_note(
+    case_id: str, baseline: dict[str, float], new: dict[str, float], threshold: float
+) -> str:
+    """Flag a regression whose case is itself noisier than the gate threshold."""
+    parts = []
+    if baseline.get(case_id, 0.0) > threshold:
+        parts.append(f"baseline spread {baseline[case_id]:.2f}")
+    if new.get(case_id, 0.0) > threshold:
+        parts.append(f"this run spread {new[case_id]:.2f}")
+    if not parts:
+        return ""
+    return f" [yellow](noisy: {', '.join(parts)} — may be model noise)[/yellow]"
 
 
 def _count_cell(value: int | None, highlight: bool = False) -> str:
@@ -267,6 +282,12 @@ def run(
         help="Run this many cases at once (thread pool). Results keep dataset order. "
         "Mind your target's rate limits.",
     ),
+    repeats: int = typer.Option(
+        1,
+        min=1,
+        help="Ask every case this many times; its score is the mean and the "
+        "spread (max - min) shows how noisy it is.",
+    ),
     no_save: bool = typer.Option(False, help="Don't save this run to the local store."),
     baseline: str = typer.Option(
         None,
@@ -279,7 +300,7 @@ def run(
 ) -> None:
     """Run a golden dataset against a target app and print the scores."""
     judge = LLMJudge(judge_model, temperature=judge_temperature) if judge_model else None
-    result = run_suite(suite, target, judge=judge, workers=workers)
+    result = run_suite(suite, target, judge=judge, workers=workers, repeats=repeats)
     if not no_save:
         result.run_id = save_run(result, judge_model)
         console.print(f"Run saved: [cyan]{result.run_id}[/cyan]")
@@ -289,12 +310,18 @@ def run(
     table.add_column("score", justify="right")
     if judge:
         table.add_column("judge", justify="right")
+    if repeats > 1:
+        table.add_column("spread", justify="right")
     table.add_column("latency ms", justify="right")
     for r in result.results:
         style = "green" if r.score >= 0.99 else "yellow" if r.score >= 0.5 else "red"
         row = [r.case_id, f"{r.score:.2f}"]
         if judge:
             row.append(f"{r.judge_score:.2f}" if r.judge_score is not None else "-")
+        if repeats > 1:
+            spread = r.spread or 0.0
+            text = f"{spread:.2f}"
+            row.append(f"[bold]{text}[/bold]" if spread > fail_on_regression else text)
         row.append(f"{r.latency_ms:.0f}")
         table.add_row(*row, style=style)
     console.print(table)
@@ -306,7 +333,17 @@ def run(
             f"[yellow]Skipped {len(result.skipped)} judge-only case(s) "
             f"(no --judge-model): {', '.join(result.skipped)}[/yellow]"
         )
-    console.print(f"\nMean score: [bold]{result.mean_score:.3f}[/bold] over {result.n_cases} cases")
+    noisy = [r for r in result.results if (r.spread or 0.0) > fail_on_regression]
+    if noisy:
+        console.print(
+            f"[yellow]Noisy: {len(noisy)} case(s) moved more than {fail_on_regression} "
+            f"between identical attempts: "
+            f"{', '.join(f'{r.case_id} ({r.spread:.2f})' for r in noisy)}[/yellow]"
+        )
+    attempts = f" × {repeats} attempts" if repeats > 1 else ""
+    console.print(
+        f"\nMean score: [bold]{result.mean_score:.3f}[/bold] over {result.n_cases} cases{attempts}"
+    )
     console.print(
         f"Wall time: {_secs(result.duration_s)} with {result.workers} worker"
         f"{'' if result.workers == 1 else 's'}"
@@ -355,10 +392,13 @@ def run(
                 f"  [yellow]note: the baseline run came from suite {baseline_suite}, "
                 f"this run is {result.suite} — only the cases they share were compared[/yellow]"
             )
+        new_spreads = {r.case_id: r.spread for r in result.results if r.spread is not None}
+        baseline_spreads = load_case_spreads(report.baseline_run_id) if report.regressed else {}
         for c in report.regressed:
             console.print(
                 f"  [red]REGRESSED {c.case_id}: "
                 f"{c.baseline_score:.2f} -> {c.new_score:.2f} (drop {c.drop:.2f})[/red]"
+                f"{_noise_note(c.case_id, baseline_spreads, new_spreads, report.threshold)}"
             )
         for case_id in report.added:
             console.print(f"  [yellow]note: {case_id} is new (not in baseline) — ignored[/yellow]")

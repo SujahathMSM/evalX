@@ -62,6 +62,17 @@ class CaseResult(BaseModel):
     judge_prompt_tokens: int | None = None
     judge_completion_tokens: int | None = None
     judge_cost_usd: float | None = None
+    # One score per attempt when the run used --repeats; empty for older
+    # runs. ``score`` is their mean.
+    attempt_scores: list[float] = []
+
+    @property
+    def spread(self) -> float | None:
+        """Max minus min attempt score: how much the case moved between
+        identical attempts. None with fewer than two attempts."""
+        if len(self.attempt_scores) < 2:
+            return None
+        return max(self.attempt_scores) - min(self.attempt_scores)
 
 
 class RunResult(BaseModel):
@@ -79,4 +90,5 @@ class RunResult(BaseModel):
     # per-case latency rises with --workers even when the run gets faster.
     duration_s: float | None = None
     workers: int | None = None
+    repeats: int | None = None  # attempts per case (--repeats)
     run_id: str | None = None  # assigned when the run is saved to the store

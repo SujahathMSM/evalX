@@ -58,6 +58,7 @@ def runs_frame(path=None) -> pd.DataFrame:
             "judge_cost_usd",
             "duration_s",
             "workers",
+            "repeats",
         ],
     )
 
@@ -345,6 +346,14 @@ def main() -> None:
                 st.metric("Judge score", f"{detail['judge_score']:.2f}")
                 if detail["judge_reason"]:
                     st.info(detail["judge_reason"])
+            attempts = detail.get("attempt_scores") or []
+            if len(attempts) > 1:
+                st.caption(
+                    f"{len(attempts)} attempts: "
+                    + ", ".join(f"{a:.2f}" for a in attempts)
+                    + f" · spread {max(attempts) - min(attempts):.2f}"
+                    + " · answer and checks shown are from the lowest-scoring attempt"
+                )
             st.caption(f"Final score {detail['score']:.2f} · latency {detail['latency_ms']:.1f} ms")
 
     with tab_compare:

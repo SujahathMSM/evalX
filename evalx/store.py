@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS runs (
     judge_tokens INTEGER,
     judge_cost_usd DOUBLE,
     duration_s DOUBLE,
-    workers INTEGER
+    workers INTEGER,
+    repeats INTEGER
 )
 """
 
@@ -55,7 +56,8 @@ CREATE TABLE IF NOT EXISTS case_results (
     error VARCHAR,
     judge_prompt_tokens INTEGER,
     judge_completion_tokens INTEGER,
-    judge_cost_usd DOUBLE
+    judge_cost_usd DOUBLE,
+    attempt_scores_json VARCHAR
 )
 """
 
@@ -69,6 +71,7 @@ _CASE_USAGE_COLUMNS = (
     ("judge_prompt_tokens", "INTEGER"),
     ("judge_completion_tokens", "INTEGER"),
     ("judge_cost_usd", "DOUBLE"),
+    ("attempt_scores_json", "VARCHAR"),
 )
 
 # Per-run columns added after the first store release, migrated the same way.
@@ -80,6 +83,7 @@ _RUN_EXTRA_COLUMNS = (
     ("judge_cost_usd", "DOUBLE"),
     ("duration_s", "DOUBLE"),
     ("workers", "INTEGER"),
+    ("repeats", "INTEGER"),
 )
 
 
@@ -142,7 +146,7 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
         con.execute(
             "INSERT INTO runs (run_id, suite, target, judge_model, mean_score, n_cases,"
             " created_at, n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s,"
-            " workers) VALUES (?, ?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?)",
+            " workers, repeats) VALUES (?, ?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?)",
             [
                 run_id,
                 result.suite,
@@ -156,13 +160,14 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
                 judge_cost,
                 result.duration_s,
                 result.workers,
+                result.repeats,
             ],
         )
         con.executemany(
             "INSERT INTO case_results (run_id, case_id, score, judge_score, latency_ms, question,"
             " answer, judge_reason, checks_json, error, judge_prompt_tokens,"
-            " judge_completion_tokens, judge_cost_usd)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " judge_completion_tokens, judge_cost_usd, attempt_scores_json)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     run_id,
@@ -178,6 +183,7 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
                     r.judge_prompt_tokens,
                     r.judge_completion_tokens,
                     r.judge_cost_usd,
+                    json.dumps(r.attempt_scores) if r.attempt_scores else None,
                 )
                 for r in result.results
             ],
@@ -201,6 +207,7 @@ _RUN_META_COLUMNS = [
     "judge_cost_usd",
     "duration_s",
     "workers",
+    "repeats",
 ]
 
 
@@ -210,7 +217,7 @@ def list_runs(path: Path | None = None) -> list[dict]:
     try:
         rows = con.execute(
             "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
-            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers"
+            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers, repeats"
             " FROM runs ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -248,7 +255,7 @@ def load_run_meta(run_id: str, path: Path | None = None) -> dict:
     try:
         row = con.execute(
             "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
-            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers"
+            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers, repeats"
             " FROM runs WHERE run_id = ?",
             [run_id],
         ).fetchone()
@@ -282,7 +289,7 @@ def load_case_details(run_id: str, path: Path | None = None) -> list[dict]:
         rows = con.execute(
             "SELECT case_id, score, judge_score, latency_ms, question, answer,"
             " judge_reason, checks_json, error, judge_prompt_tokens, judge_completion_tokens,"
-            " judge_cost_usd FROM case_results WHERE run_id = ?",
+            " judge_cost_usd, attempt_scores_json FROM case_results WHERE run_id = ?",
             [run_id],
         ).fetchall()
     finally:
@@ -296,6 +303,7 @@ def load_case_details(run_id: str, path: Path | None = None) -> list[dict]:
         detail["judge_prompt_tokens"] = row[9]
         detail["judge_completion_tokens"] = row[10]
         detail["judge_cost_usd"] = row[11]
+        detail["attempt_scores"] = json.loads(row[12]) if row[12] else None
         details.append(detail)
     return details
 
@@ -362,6 +370,16 @@ def judged_case_ids(run_id: str, path: Path | None = None) -> set[str]:
     finally:
         con.close()
     return {row[0] for row in rows}
+
+
+def load_case_spreads(run_id: str, path: Path | None = None) -> dict[str, float]:
+    """case_id -> attempt spread (max - min) for cases run more than once."""
+    spreads = {}
+    for detail in load_case_details(run_id, path):
+        scores = detail["attempt_scores"]
+        if scores and len(scores) > 1:
+            spreads[detail["case_id"]] = max(scores) - min(scores)
+    return spreads
 
 
 def compare_runs(ref_a: str, ref_b: str, path: Path | None = None) -> RunComparison:
