@@ -1,11 +1,21 @@
 """The evalx command line."""
 
+from typing import Annotated
+
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from evalx import __version__
 from evalx.judge import LLMJudge
+from evalx.reports import (
+    CaseRegressionNote,
+    GateVerdict,
+    ReportError,
+    RunReport,
+    parse_report_spec,
+    write_report,
+)
 from evalx.runner import run_suite
 from evalx.store import (
     StoreError,
@@ -297,8 +307,20 @@ def run(
     fail_on_regression: float = typer.Option(
         0.2, help="Max allowed per-case score drop vs the baseline (needs --baseline)."
     ),
+    reports: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--report",
+            help="Write a report as FORMAT:PATH (json, junit or markdown). Repeatable, "
+            "e.g. --report junit:evalx.xml --report markdown:$GITHUB_STEP_SUMMARY",
+        ),
+    ] = None,
 ) -> None:
     """Run a golden dataset against a target app and print the scores."""
+    try:  # validate before spending a run on it
+        report_specs = [parse_report_spec(spec) for spec in reports or []]
+    except ReportError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--report") from exc
     judge = LLMJudge(judge_model, temperature=judge_temperature) if judge_model else None
     result = run_suite(suite, target, judge=judge, workers=workers, repeats=repeats)
     if not no_save:
@@ -359,21 +381,37 @@ def run(
             console.print(f"Judge usage: {judge_tokens or 0:,} tokens, {cost}")
 
     failed = False
+    verdicts: list[GateVerdict] = []
+    regressions: dict[str, CaseRegressionNote] = {}
     n_graded = len(result.results)
     n_errors = sum(1 for r in result.results if r.error is not None)
     error_rate = n_errors / n_graded if n_graded else 0.0
+    infra_detail = f"{n_errors}/{n_graded} cases errored (allowed rate {max_error_rate:.2f})"
     if error_rate > max_error_rate:
         console.print(
             f"[red]INFRA FAIL: {n_errors}/{n_graded} cases errored "
             f"(rate {error_rate:.2f} > allowed {max_error_rate:.2f})[/red]"
         )
         failed = True
+        verdicts.append(GateVerdict(gate="infra", passed=False, detail=infra_detail))
+    else:
+        verdicts.append(GateVerdict(gate="infra", passed=True, detail=infra_detail))
 
     if result.mean_score < fail_under:
         console.print(f"[red]FAIL: mean {result.mean_score:.3f} < gate {fail_under}[/red]")
         failed = True
+        verdicts.append(
+            GateVerdict(
+                gate="mean", passed=False, detail=f"{result.mean_score:.3f} < {fail_under}"
+            )
+        )
     else:
         console.print("[green]Gate passed.[/green]")
+        verdicts.append(
+            GateVerdict(
+                gate="mean", passed=True, detail=f"{result.mean_score:.3f} >= {fail_under}"
+            )
+        )
 
     if baseline is not None:
         new_scores = {r.case_id: r.score for r in result.results}
@@ -395,10 +433,17 @@ def run(
         new_spreads = {r.case_id: r.spread for r in result.results if r.spread is not None}
         baseline_spreads = load_case_spreads(report.baseline_run_id) if report.regressed else {}
         for c in report.regressed:
+            note = _noise_note(c.case_id, baseline_spreads, new_spreads, report.threshold)
+            regressions[c.case_id] = CaseRegressionNote(
+                baseline_score=c.baseline_score,
+                new_score=c.new_score,
+                drop=c.drop,
+                noisy=bool(note),
+            )
             console.print(
                 f"  [red]REGRESSED {c.case_id}: "
                 f"{c.baseline_score:.2f} -> {c.new_score:.2f} (drop {c.drop:.2f})[/red]"
-                f"{_noise_note(c.case_id, baseline_spreads, new_spreads, report.threshold)}"
+                f"{note}"
             )
         for case_id in report.added:
             console.print(f"  [yellow]note: {case_id} is new (not in baseline) — ignored[/yellow]")
@@ -413,6 +458,11 @@ def run(
                     f"  [yellow]note: baseline was judged, this run is unjudged: {n_judged} "
                     "case(s) that have judge scores in the baseline were not compared[/yellow]"
                 )
+        detail = (
+            f"baseline {report.baseline_name}: {len(report.regressed)} case(s) dropped "
+            f"past {report.threshold}"
+        )
+        verdicts.append(GateVerdict(gate="regression", passed=report.passed, detail=detail))
         if report.passed:
             console.print("[green]No case regressed past the threshold.[/green]")
         else:
@@ -421,6 +471,22 @@ def run(
                 f"dropped past {report.threshold}[/red]"
             )
             failed = True
+
+    if report_specs:
+        judge_tokens, judge_cost = run_judge_usage(result)
+        run_report = RunReport(
+            result=result,
+            verdicts=verdicts,
+            fail_under=fail_under,
+            baseline=baseline,
+            regressions=regressions,
+            judge_model=judge_model,
+            judge_tokens=judge_tokens,
+            judge_cost_usd=judge_cost,
+        )
+        for fmt, path in report_specs:
+            write_report(fmt, path, run_report)
+            console.print(f"Report written: [cyan]{fmt}[/cyan] -> {path}")
 
     if failed:
         raise typer.Exit(code=1)
