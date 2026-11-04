@@ -10,7 +10,7 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-223_passing-brightgreen.svg" alt="Tests: 223 passing">
+  <img src="https://img.shields.io/badge/tests-236_passing-brightgreen.svg" alt="Tests: 236 passing">
 </p>
 
 <p align="center">
@@ -73,7 +73,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-223 tests (including end-to-end), `ruff` clean, CI green on every push.
+236 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Quickstart
 
@@ -213,7 +213,7 @@ silently scoring 0.
 
 | Command | What it does | Key options |
 | --- | --- | --- |
-| `evalx run` | Run a suite against a target, print the per-case table, save the run | `--suite`, `--target`, `--judge-model`, `--judge-temperature`, `--fail-under`, `--baseline`, `--fail-on-regression` (default 0.2), `--max-error-rate` (default 0.0), `--workers` (default 1), `--repeats` (default 1), `--no-save` |
+| `evalx run` | Run a suite against a target, print the per-case table, save the run | `--suite`, `--target`, `--judge-model`, `--judge-temperature`, `--fail-under`, `--baseline`, `--fail-on-regression` (default 0.2), `--max-error-rate` (default 0.0), `--workers` (default 1), `--repeats` (default 1), `--report FORMAT:PATH` (repeatable), `--no-save` |
 | `evalx runs` | List stored runs, newest first, with mean, error/skipped counts, judge cost, wall time and workers | — |
 | `evalx compare A B` | Per-case score, latency and judge-cost deltas plus whole-run wall time between two runs (refs: full id, unique prefix, `latest`, `latest-N`) | — |
 | `evalx baseline pin REF` | Pin a stored run as a named baseline (`--name`, default `stable`) | `--allow-errors` (required if the run contains error cases) |
@@ -341,6 +341,27 @@ quality drop in the first place, `evalx run --max-error-rate` (default 0.0)
 adds an infra gate that fails the run on its fraction of errored cases,
 reported before the score gates.
 
+## Reports for CI
+
+`evalx run --report FORMAT:PATH` writes the run out for other tools, and can
+be given several times:
+
+```bash
+evalx run --suite datasets/demo/v1 --target examples.demo_app:answer --fail-under 0.4 \
+  --report junit:reports/evalx.xml \
+  --report markdown:"$GITHUB_STEP_SUMMARY" \
+  --report json:reports/evalx.json
+```
+
+| Format | Use it for | What's in it |
+| --- | --- | --- |
+| `junit` | test-report views (GitHub Actions reporters, GitLab, Jenkins) | one `<testcase>` per case: `<error>` if it errored, `<failure>` if it regressed past the baseline or scored below `--fail-under`; score, judge reason, question and answer in `system-out` |
+| `markdown` | a job summary or a PR comment | pass/fail per gate, judge cost, wall time, the cases needing attention (worst first) and a collapsible table of all cases |
+| `json` | anything else | the full run plus every gate verdict, regressions and judge usage |
+
+Reports are written even when a gate fails, so CI can show *why* it failed.
+This repo's own CI writes the Markdown report to the workflow summary page.
+
 ## Dashboard
 
 ```bash
@@ -378,7 +399,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 223 tests
+python -m pytest                      # 236 tests
 ruff check .
 ```
 
@@ -429,10 +450,12 @@ grading itself).
 - **More check types:** `not_contains`, `numeric` (with tolerance),
   `max_length` and `json_schema`, all validated at dataset load.
 
+- **Reports for CI:** `--report junit|markdown|json:PATH`, written even
+  when a gate fails; CI posts the Markdown report to its summary page.
+
 ## Roadmap
 
-- **Report formats:** `--output junit|json|markdown` for CI test reports
-  and PR comments.
+- **Release 0.2.0:** CHANGELOG and publishing to PyPI.
 
 ## License
 

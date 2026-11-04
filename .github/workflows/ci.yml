@@ -30,4 +30,8 @@ jobs:
         # The demo app scores a mean of 0.500; the gate fails the build if a
         # change ever drags it below 0.4. Point --suite at your real dataset
         # to gate what actually matters.
-        run: evalx run --suite datasets/demo/v1 --target examples.demo_app:answer --fail-under 0.4 --no-save
+        # The Markdown report lands on the workflow run's summary page.
+        run: >-
+          evalx run --suite datasets/demo/v1 --target examples.demo_app:answer
+          --fail-under 0.4 --no-save
+          --report "markdown:$GITHUB_STEP_SUMMARY"
