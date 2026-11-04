@@ -1,11 +1,28 @@
 [project]
-name = "evalx"
-version = "0.1.0"
-description = "Eval harness for LLM apps: golden datasets, code + LLM-judge scoring, regression tracking, CI gates."
+# Published as evalx-gate: "evalx" on PyPI is an unrelated project. The
+# command (evalx) and the import (import evalx) are unchanged.
+name = "evalx-gate"
+dynamic = ["version"]  # single source: evalx/__init__.py
+description = "Regression gate for LLM apps: golden datasets, code + LLM-judge scoring, per-case baseline gating in CI, local run history."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
+authors = [{ name = "SujahathMSM" }]
+keywords = ["llm", "evaluation", "evals", "llm-as-judge", "regression-testing", "ci", "rag"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "pydantic>=2.0",
     "typer>=0.9",
@@ -17,9 +34,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dashboard = ["streamlit", "pandas"]
 dev = ["pytest", "ruff==0.16.9", "streamlit", "pandas"]
 # Browser for the dashboard end-to-end test: also run `playwright install chromium`.
 e2e = ["playwright==1.63.0"]
+
+[project.urls]
+Homepage = "https://github.com/SujahathMSM/evalX"
+Repository = "https://github.com/SujahathMSM/evalX"
+Changelog = "https://github.com/SujahathMSM/evalX/blob/main/CHANGELOG.md"
+Issues = "https://github.com/SujahathMSM/evalX/issues"
 
 [project.scripts]
 evalx = "evalx.cli:app"
@@ -27,6 +51,16 @@ evalx = "evalx.cli:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "evalx/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+# The distribution is evalx-gate but the import package is evalx.
+packages = ["evalx"]
+
+[tool.hatch.build.targets.sdist]
+include = ["evalx", "tests", "datasets", "examples", "README.md", "CHANGELOG.md", "LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

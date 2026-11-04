@@ -10,10 +10,11 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-236_passing-brightgreen.svg" alt="Tests: 236 passing">
+  <img src="https://img.shields.io/badge/tests-243_passing-brightgreen.svg" alt="Tests: 243 passing">
 </p>
 
 <p align="center">
+  <a href="#install">Install</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#features">Features</a> ·
   <a href="#check-types">Check types</a> ·
@@ -22,7 +23,7 @@
   <a href="#milestones">Milestones</a>
 </p>
 
-![Run detail for the AeroIntel dogfood run: 67 cases, mean 0.737, judged by claude-haiku-5-5](docs/dashboard.png)
+![Run detail for the AeroIntel dogfood run: 67 cases, mean 0.737, judged by claude-haiku-5-5](https://raw.githubusercontent.com/SujahathMSM/evalX/main/docs/dashboard.png)
 
 <p align="center">
   <em>evalX grading a real system: the AeroIntel dogfood run — 67 cases, mean 0.737.</em>
@@ -73,9 +74,22 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-236 tests (including end-to-end), `ruff` clean, CI green on every push.
+243 tests (including end-to-end), `ruff` clean, CI green on every push.
+
+## Install
+
+```bash
+pip install evalx-gate
+```
+
+The package is `evalx-gate` on PyPI (an unrelated project owns the `evalx`
+name there); the command is `evalx` and the import is `import evalx`.
+Point `--target` at a `module:function` in your project, run from your
+project's folder. Python 3.11+.
 
 ## Quickstart
+
+From a clone of this repo (the demo dataset and app live here):
 
 ```bash
 pip install -e .
@@ -371,9 +385,10 @@ evalx dashboard            # http://localhost:8501  (add --port N if busy)
 Three tabs over your stored runs: **Runs** (history table with error counts
 and a mean-score trend line), **Run detail** (per-case scores for one run),
 and **Compare** (pick a baseline and a challenger — per-case deltas with
-▲/▼ markers). Needs the dev extras: `pip install -e ".[dev]"`.
+▲/▼ markers). Needs the dashboard extra:
+`pip install "evalx-gate[dashboard]"` (or `pip install -e ".[dev]"` in a clone).
 
-![Case drill-down: a must-refuse question, AeroIntel's refusal answer, and the regex check that graded it](docs/drill-down.png)
+![Case drill-down: a must-refuse question, AeroIntel's refusal answer, and the regex check that graded it](https://raw.githubusercontent.com/SujahathMSM/evalX/main/docs/drill-down.png)
 
 *Case drill-down — the stored question, the app's actual answer (here a
 refusal, returned verbatim by the adapter), and the per-check scores behind
@@ -399,7 +414,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 236 tests
+python -m pytest                      # 243 tests
 ruff check .
 ```
 
@@ -414,6 +429,19 @@ CI (`.github/workflows/ci.yml`) runs the same lint + tests on every push and
 pull request, then gates the deterministic demo suite at
 `--fail-under 0.4` (its designed mean is 0.500, so the gate verifies the
 grading itself).
+
+### Releasing
+
+The version lives in one place, `evalx/__init__.py`. To release:
+
+1. Bump `__version__` and add a `## [x.y.z]` section to `CHANGELOG.md`
+   (a test fails if the section is missing).
+2. Merge to `main`, then tag it: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+`.github/workflows/release.yml` then checks the tag matches the version,
+runs lint and tests, builds and `twine check`s the package, publishes it to
+PyPI through trusted publishing (no API token), and creates a GitHub release
+with that version's changelog notes.
 
 ## Milestones
 
@@ -453,10 +481,21 @@ grading itself).
 - **Reports for CI:** `--report junit|markdown|json:PATH`, written even
   when a gate fails; CI posts the Markdown report to its summary page.
 
+- **0.2.0 on PyPI** as `evalx-gate`, released from a version tag by
+  GitHub Actions with trusted publishing. See the
+  [CHANGELOG](https://github.com/SujahathMSM/evalX/blob/main/CHANGELOG.md).
+
 ## Roadmap
 
-- **Release 0.2.0:** CHANGELOG and publishing to PyPI.
+- **0.3 — semantic similarity and HTML export:** a `semantic` check type
+  scored with embeddings through LiteLLM (no torch), and
+  `evalx export --html` for a self-contained report to share.
+- **0.4 — RAG faithfulness:** targets can return their retrieved context;
+  judge modes for faithfulness (is every claim supported?) and context
+  relevance (did retrieval find the right chunk?).
+- **0.5 — multi-turn conversations:** cases with several turns and checks
+  per turn, for chatbots and agents.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/SujahathMSM/evalX/blob/main/LICENSE).

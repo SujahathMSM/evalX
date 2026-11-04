@@ -395,3 +395,19 @@ def test_cli_run_rejects_zero_workers(isolated_store):
         app, ["run", "--suite", DEMO, "--target", TARGET, "--workers", "0", "--no-save"]
     )
     assert res.exit_code == 2  # Typer usage error: below min=1
+
+
+def test_cli_dashboard_without_streamlit_names_the_extra(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def no_streamlit(name, *args, **kwargs):
+        if name == "streamlit":
+            raise ImportError("No module named 'streamlit'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", no_streamlit)
+    res = CliRunner().invoke(app, ["dashboard"])
+    assert res.exit_code == 1
+    assert 'pip install "evalx-gate[dashboard]"' in res.output
