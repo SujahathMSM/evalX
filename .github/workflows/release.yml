@@ -1,0 +1,95 @@
+name: release
+
+# Publishes evalx-gate to PyPI when a version tag is pushed:
+#   git tag v0.2.0 && git push origin v0.2.0
+# Uses PyPI trusted publishing (OIDC): no API token is stored anywhere.
+# One-time setup: a "pending publisher" on pypi.org for this repo with
+# workflow release.yml and environment pypi, and a GitHub environment
+# named pypi.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: pip install -e ".[dev]" build twine
+
+      - name: Tag matches package version
+        run: |
+          version=$(python -c "import evalx; print(evalx.__version__)")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match evalx.__version__ $version"
+            exit 1
+          fi
+
+      - name: Lint and test
+        # The e2e dashboard test skips without Playwright; CI on main runs it.
+        run: |
+          ruff check .
+          python -m pytest -q
+
+      - name: Build
+        run: python -m build
+
+      - name: Check distributions
+        run: twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/evalx-gate/
+    permissions:
+      id-token: write  # trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Release notes: this version's section of CHANGELOG.md.
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" {on=1; next}
+            on && /^## / {exit}
+            on {print}
+          ' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" dist/* --title "evalX $version" --notes-file notes.md

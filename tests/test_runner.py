@@ -271,3 +271,40 @@ def test_parallel_run_skips_judge_only_cases(tmp_path):
 def test_workers_must_be_positive():
     with pytest.raises(ValueError, match="workers must be >= 1"):
         run_suite(DEMO, TARGET, workers=0)
+
+
+# --- Packaging: targets resolve from the working directory -------------------
+
+
+def test_target_in_working_directory_is_importable(tmp_path, monkeypatch):
+    """An installed `evalx` doesn't have the project dir on sys.path."""
+    import sys
+
+    (tmp_path / "my_cwd_app.py").write_text("def answer(q):\n    return 'Paris'\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "path", [p for p in sys.path if p not in ("", str(tmp_path))])
+    fn = resolve_target("my_cwd_app:answer")
+    assert fn("Capital of France?") == "Paris"
+
+
+def test_cli_bad_target_is_a_clean_error(tmp_path):
+    from typer.testing import CliRunner
+
+    from evalx.cli import app
+
+    res = CliRunner().invoke(app, ["run", "--suite", DEMO, "--target", "nope_mod:answer"])
+    assert res.exit_code == 2
+    assert "cannot import module 'nope_mod'" in res.output
+    assert res.exception is None or isinstance(res.exception, SystemExit)
+
+
+def test_cli_missing_dataset_is_a_clean_error(tmp_path):
+    from typer.testing import CliRunner
+
+    from evalx.cli import app
+
+    res = CliRunner().invoke(
+        app, ["run", "--suite", str(tmp_path / "missing"), "--target", TARGET]
+    )
+    assert res.exit_code == 2
+    assert "dataset not found" in res.output

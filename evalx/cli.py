@@ -7,6 +7,8 @@ from rich.console import Console
 from rich.table import Table
 
 from evalx import __version__
+from evalx.adapters import AdapterError
+from evalx.datasets import DatasetError
 from evalx.judge import LLMJudge
 from evalx.reports import (
     CaseRegressionNote,
@@ -240,7 +242,10 @@ def dashboard(
     try:
         import streamlit  # noqa: F401
     except ImportError:
-        console.print('[red]streamlit is not installed. Run: pip install -e ".[dev]"[/red]')
+        console.print(
+            # \[ so Rich prints the extra instead of reading it as markup
+            '[red]streamlit is not installed. Run: pip install "evalx-gate\\[dashboard]"[/red]'
+        )
         raise typer.Exit(code=1)
     import subprocess
     import sys
@@ -322,7 +327,13 @@ def run(
     except ReportError as exc:
         raise typer.BadParameter(str(exc), param_hint="--report") from exc
     judge = LLMJudge(judge_model, temperature=judge_temperature) if judge_model else None
-    result = run_suite(suite, target, judge=judge, workers=workers, repeats=repeats)
+    try:
+        result = run_suite(suite, target, judge=judge, workers=workers, repeats=repeats)
+    except (AdapterError, DatasetError) as exc:
+        # Setup problems (bad --target, missing or invalid dataset): a clear
+        # message, not a traceback. Exit 2 like other usage errors.
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from exc
     if not no_save:
         result.run_id = save_run(result, judge_model)
         console.print(f"Run saved: [cyan]{result.run_id}[/cyan]")
