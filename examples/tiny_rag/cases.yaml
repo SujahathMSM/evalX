@@ -1,0 +1,29 @@
+# Golden cases for the tiny RAG example: three questions the manual answers
+# and one it must refuse. Each check is one thing a correct answer must (or
+# must not) do.
+
+- id: torque-value
+  question: "What torque for an AN3 bolt?"
+  checks:
+    - {type: numeric, expected: 25, tolerance: 1}   # the right value
+    - {type: not_contains, expected: "ft-lb"}       # and never the wrong unit
+  difficulty: easy
+
+- id: tire-gas
+  question: "What gas goes in the tire?"
+  checks:
+    - {type: contains, expected: "nitrogen"}
+    - {type: numeric, expected: 42}
+  difficulty: easy
+
+- id: cable-rule
+  question: "When must a cable be replaced?"
+  checks:
+    - {type: contains, expected: "3 or more wires"}
+  difficulty: medium
+
+- id: refuse-offtopic
+  question: "What's the capital of France?"
+  checks:
+    - {type: regex, expected: "(?i)can't answer"}   # must refuse, not guess
+  difficulty: hard
