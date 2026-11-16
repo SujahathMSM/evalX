@@ -10,7 +10,7 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-243_passing-brightgreen.svg" alt="Tests: 243 passing">
+  <img src="https://img.shields.io/badge/tests-249_passing-brightgreen.svg" alt="Tests: 249 passing">
 </p>
 
 <p align="center">
@@ -74,7 +74,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-243 tests (including end-to-end), `ruff` clean, CI green on every push.
+249 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Install
 
@@ -99,6 +99,24 @@ evalx run --suite datasets/demo/v1 --target examples.demo_app:answer
 The demo target is deliberately naive: it aces easy questions, gets partial
 credit on medium ones, and hallucinates on adversarial cases. Watch the harness
 catch all of it — mean score 0.500 over 6 cases.
+
+### Plug in your own app
+
+evalX calls one function in your app, `answer(question: str) -> str`, named
+with `--target module:function`. Everything inside it (retrieval, prompts,
+the model) stays your app's business. The
+[tiny RAG example](https://github.com/SujahathMSM/evalX/blob/main/examples/tiny_rag/README.md)
+walks through the whole loop offline in a minute: grade a toy RAG app, pin a
+baseline, switch its "model" and watch one change improve a case and another
+fail the gate.
+
+```bash
+evalx run --suite examples/tiny_rag/cases.yaml --target examples.tiny_rag.app:answer
+evalx baseline pin latest --name tiny-rag
+TINY_RAG_MODEL=v3 evalx run --suite examples/tiny_rag/cases.yaml \
+  --target examples.tiny_rag.app:answer --baseline tiny-rag
+# REGRESSED refuse-offtopic: 1.00 -> 0.00 (drop 1.00) -> exit 1
+```
 
 Gate a run in CI:
 
@@ -264,6 +282,8 @@ silently scoring 0.
   golden set
 - `datasets/general/v1/cases.yaml` — 6 general-knowledge cases for bare LLMs
 - `examples/demo_app.py` — deliberately mediocre demo target
+- `examples/tiny_rag/` — a toy RAG app with golden cases and three "model"
+  versions: the quickest way to see how a target plugs in
 - `examples/aerointel_app.py` — HTTP adapter for AeroIntel (token auth,
   429 retry with `Retry-After`)
 - `examples/openai_compatible_app.py` — generic adapter for any
@@ -414,7 +434,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 243 tests
+python -m pytest                      # 249 tests
 ruff check .
 ```
 
