@@ -52,6 +52,7 @@ def test_readme_walkthrough(isolated_store, monkeypatch):
     v2 = runner.invoke(app, ["run", "--suite", SUITE, "--target", TARGET, "--baseline", "tiny-rag"])
     assert v2.exit_code == 0
     assert "No case regressed" in v2.output
+    assert v2.output.rstrip().endswith("RESULT: PASS")
     comp = store.compare_runs("latest-1", "latest")
     assert (comp.improved, comp.regressed, comp.unchanged) == (1, 0, 3)
 
@@ -63,3 +64,6 @@ def test_readme_walkthrough(isolated_store, monkeypatch):
     )
     assert v3.exit_code == 1
     assert "REGRESSED refuse-offtopic: 1.00 -> 0.00 (drop 1.00)" in v3.output
+    # The mean gate passes on its own, but the run's verdict is unambiguous.
+    assert "Mean gate passed: mean 0.750 >= 0.0" in v3.output
+    assert v3.output.rstrip().endswith("RESULT: FAIL (regression gate)")

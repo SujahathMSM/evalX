@@ -80,7 +80,7 @@ def test_judged_run_end_to_end(evalx_cli, fake_openai, suite, e2e_env):
     assert res.returncode == 0, res.stdout + res.stderr
     assert "Run saved:" in res.stdout
     assert "Mean score: 1.000 over 4 cases" in res.stdout
-    assert "Gate passed." in res.stdout
+    assert "Mean gate passed" in res.stdout
 
     # Real HTTP traffic: four app calls, two judge calls (only rubric cases).
     assert len(fake_openai.target_calls()) == 4
@@ -143,7 +143,7 @@ def test_target_outage_trips_infra_gate_and_blocks_pinning(
     assert "ERROR e2: target: OpenAICompatError:" in res.stdout
     assert "HTTP 429: rate limit exceeded" in res.stdout
     assert "INFRA FAIL: 1/3 cases errored (rate 0.33 > allowed 0.00)" in res.stdout
-    assert res.stdout.index("INFRA FAIL") < res.stdout.index("Gate passed.")
+    assert res.stdout.index("INFRA FAIL") < res.stdout.index("Mean gate passed")
 
     # The outage run was still saved, with its error count and error text.
     (run,) = store.list_runs(_store(e2e_env))

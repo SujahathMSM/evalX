@@ -406,10 +406,16 @@ def run(
         failed = True
         verdicts.append(GateVerdict(gate="infra", passed=False, detail=infra_detail))
     else:
+        console.print(
+            f"[green]Infra gate passed: {n_errors}/{n_graded} cases errored "
+            f"(allowed rate {max_error_rate:.2f})[/green]"
+        )
         verdicts.append(GateVerdict(gate="infra", passed=True, detail=infra_detail))
 
     if result.mean_score < fail_under:
-        console.print(f"[red]FAIL: mean {result.mean_score:.3f} < gate {fail_under}[/red]")
+        console.print(
+            f"[red]MEAN GATE FAILED: mean {result.mean_score:.3f} < {fail_under}[/red]"
+        )
         failed = True
         verdicts.append(
             GateVerdict(
@@ -417,7 +423,9 @@ def run(
             )
         )
     else:
-        console.print("[green]Gate passed.[/green]")
+        console.print(
+            f"[green]Mean gate passed: mean {result.mean_score:.3f} >= {fail_under}[/green]"
+        )
         verdicts.append(
             GateVerdict(
                 gate="mean", passed=True, detail=f"{result.mean_score:.3f} >= {fail_under}"
@@ -498,6 +506,16 @@ def run(
         for fmt, path in report_specs:
             write_report(fmt, path, run_report)
             console.print(f"Report written: [cyan]{fmt}[/cyan] -> {path}")
+
+    # One unambiguous last line: the run passes only if every gate did.
+    failed_gates = [v.gate for v in verdicts if not v.passed]
+    if failed_gates:
+        console.print(
+            f"\n[bold red]RESULT: FAIL ({', '.join(failed_gates)} gate"
+            f"{'' if len(failed_gates) == 1 else 's'})[/bold red]"
+        )
+    else:
+        console.print("\n[bold green]RESULT: PASS[/bold green]")
 
     if failed:
         raise typer.Exit(code=1)

@@ -10,7 +10,7 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-247_passing-brightgreen.svg" alt="Tests: 247 passing">
+  <img src="https://img.shields.io/badge/tests-249_passing-brightgreen.svg" alt="Tests: 249 passing">
 </p>
 
 <p align="center">
@@ -74,7 +74,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-247 tests (including end-to-end), `ruff` clean, CI green on every push.
+249 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Install
 
@@ -434,7 +434,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 247 tests
+python -m pytest                      # 249 tests
 ruff check .
 ```
 

@@ -166,7 +166,7 @@ def test_infra_gate_fails_on_errors_at_default_limit(isolated_store):
     out = _flat(res.output)
     assert "INFRA FAIL: 2/6 cases errored (rate 0.33 > allowed 0.00)" in out
     # Printed before the mean-gate verdict; the results table still prints.
-    assert out.index("INFRA FAIL") < out.index("Gate passed.")
+    assert out.index("INFRA FAIL") < out.index("Mean gate passed")
     assert "q002" in out
     assert "Mean score" in out
 
@@ -178,7 +178,7 @@ def test_infra_gate_passes_with_permissive_limit(isolated_store):
     )
     assert res.exit_code == 0
     assert "INFRA FAIL" not in res.output
-    assert "Gate passed." in res.output
+    assert "Mean gate passed" in res.output
 
 
 def test_infra_gate_permissive_limit_still_applies_score_gate(isolated_store):
@@ -192,7 +192,7 @@ def test_infra_gate_permissive_limit_still_applies_score_gate(isolated_store):
     )  # fmt: skip
     assert res.exit_code == 1
     assert "INFRA FAIL" not in res.output
-    assert "FAIL: mean 0.333 < gate 0.4" in res.output
+    assert "MEAN GATE FAILED: mean 0.333 < 0.4" in res.output
 
 
 def test_infra_gate_rate_at_limit_passes(isolated_store):
@@ -343,3 +343,24 @@ def test_unjudged_baseline_does_not_print_note(isolated_store):
     assert "q999 is in the baseline but not in this run" in out
     assert "baseline was judged" not in out
     assert res.exit_code == 0
+
+
+def test_result_line_names_every_failed_gate(isolated_store):
+    res = CliRunner().invoke(
+        app,
+        ["run", "--suite", DEMO, "--target", CRASHING, "--no-save", "--fail-under", "0.9"],
+        env={"COLUMNS": "200"},
+    )
+    assert res.exit_code == 1
+    out = res.output
+    assert "INFRA FAIL" in out
+    assert "MEAN GATE FAILED: mean 0.333 < 0.9" in out
+    assert out.rstrip().endswith("RESULT: FAIL (infra, mean gates)")
+
+
+def test_clean_run_prints_each_gate_and_pass(isolated_store):
+    res = CliRunner().invoke(app, ["run", "--suite", DEMO, "--target", TARGET, "--no-save"])
+    assert res.exit_code == 0
+    assert "Infra gate passed: 0/6 cases errored" in res.output
+    assert "Mean gate passed: mean 0.500 >= 0.0" in res.output
+    assert res.output.rstrip().endswith("RESULT: PASS")

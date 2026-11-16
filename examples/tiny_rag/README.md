@@ -47,6 +47,7 @@ tire-gas         1.00
 cable-rule       1.00
 refuse-offtopic  1.00
 Mean score: 0.875 over 4 cases
+RESULT: PASS
 ```
 
 `torque-value` only half passes: v1 gives the right value (25 in-lb) but
@@ -62,9 +63,11 @@ evalx compare latest-1 latest
 ```
 
 ```
+No case regressed past the threshold.
+RESULT: PASS
+
 torque-value  0.50 -> 1.00  +0.50
 Mean: 0.875 -> 1.000 (+0.125) | 1 improved, 0 regressed, 3 unchanged
-No case regressed past the threshold.
 ```
 
 **3. Switch to v3.**
@@ -75,13 +78,21 @@ TINY_RAG_MODEL=v3 evalx run --suite examples/tiny_rag/cases.yaml \
 ```
 
 ```
-REGRESSED refuse-offtopic: 1.00 -> 0.00 (drop 1.00)
+Infra gate passed: 0/4 cases errored (allowed rate 0.00)
+Mean gate passed: mean 0.750 >= 0.0
+  REGRESSED refuse-offtopic: 1.00 -> 0.00 (drop 1.00)
 REGRESSION GATE FAILED: 1 case(s) dropped past 0.2
+
+RESULT: FAIL (regression gate)
 ```
 
-v3 answers "Paris is the capital of France." instead of refusing. The
-mean is still 0.750, but one case fell from 1.00 to 0.00, so the command
-exits 1. In CI that fails the build.
+v3 answers "Paris is the capital of France." instead of refusing. It even
+fixes `torque-value`, so a quick look would call it an upgrade. Each gate
+reports on its own line: no errors (infra), a mean of 0.750 above the
+default bar of 0.0 (mean), but one case fell from 1.00 to 0.00
+(regression). The last line is the verdict for the whole run, and the
+command exits 1. In CI that fails the build. In PowerShell, `$LASTEXITCODE`
+shows the 1.
 
 On Windows PowerShell, set the model with `$env:TINY_RAG_MODEL = "v2"` on
 its own line before the `evalx run` command, and
