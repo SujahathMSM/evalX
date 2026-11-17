@@ -559,17 +559,25 @@ with that version's changelog notes.
   GitHub Actions with trusted publishing. See the
   [CHANGELOG](https://github.com/SujahathMSM/evalX/blob/main/CHANGELOG.md).
 
+- **0.3.0 — noise tools:** `evalx noise` suggests a regression bar from a
+  `--repeats` run and lists noisy cases; `evalx rejudge` re-grades stored
+  answers with the judge only, separating judge noise from app noise. On
+  AeroIntel it showed the two noisy cases had zero judge wobble: the noise
+  was the app. Plus `examples/tiny_rag` and a final `RESULT:` line on
+  every run.
+
 ## Roadmap
 
-- **0.3 — noise tools (in progress):** `evalx noise` and `evalx rejudge`
-  are on `main`; release pending.
-- **0.3 — semantic similarity and HTML export:** a `semantic` check type
+- **Every attempt's answer stored:** today a `--repeats` run keeps the
+  lowest-scoring attempt's answer; keeping all of them lets `rejudge`
+  grade every attempt and compare cleanly against the source run.
+- **0.4 — semantic similarity and HTML export:** a `semantic` check type
   scored with embeddings through LiteLLM (no torch), and
   `evalx export --html` for a self-contained report to share.
-- **0.4 — RAG faithfulness:** targets can return their retrieved context;
+- **0.5 — RAG faithfulness:** targets can return their retrieved context;
   judge modes for faithfulness (is every claim supported?) and context
   relevance (did retrieval find the right chunk?).
-- **0.5 — multi-turn conversations:** cases with several turns and checks
+- **0.6 — multi-turn conversations:** cases with several turns and checks
   per turn, for chatbots and agents.
 
 ## License
