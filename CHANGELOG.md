@@ -7,6 +7,31 @@ All notable changes to evalX. The format follows
 evalX is published on PyPI as **`evalx-gate`** (`pip install evalx-gate`);
 the command is `evalx` and the import is `import evalx`.
 
+## [Unreleased]
+
+### Added
+
+- `evalx noise [RUN]`: reads a saved `--repeats` run, shows how far cases
+  move between identical attempts, and suggests a `--fail-on-regression`
+  bar (2.5× the median spread of the cases that moved, rounded up to 0.05,
+  between 0.05 and 1.0) plus the noisy cases above it.
+- `evalx rejudge RUN`: re-grades a run's stored answers with the judge only,
+  N times, without calling the app, to measure judge noise or try another
+  judge model on the same answers. Saved as a new run linked to the
+  original (`runs.rejudge_of`); `evalx compare` names it.
+- `examples/tiny_rag`: a toy RAG app showing how a target plugs in. (#13)
+
+### Changed
+
+- Gate output names each gate and ends with `RESULT: PASS` or
+  `RESULT: FAIL (...)`. (#13)
+
+### Fixed
+
+- A full run id that is also the prefix of another (two runs saved in the
+  same second, `X` and `X-2`) was reported as ambiguous; an exact id now
+  always wins.
+
 ## [0.2.0] - 2026-11-04
 
 First release on PyPI.

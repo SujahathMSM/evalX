@@ -10,6 +10,8 @@ from evalx import __version__
 from evalx.adapters import AdapterError
 from evalx.datasets import DatasetError
 from evalx.judge import LLMJudge
+from evalx.noise import NoiseError, noise_report, percentile
+from evalx.rejudge import RejudgeError, rejudge_run
 from evalx.reports import (
     CaseRegressionNote,
     GateVerdict,
@@ -29,6 +31,7 @@ from evalx.store import (
     load_run_meta,
     pin_baseline,
     regression_against_baseline,
+    resolve_run_id,
     run_judge_usage,
     save_run,
 )
@@ -179,6 +182,13 @@ def compare(
 ) -> None:
     """Compare two stored runs case by case."""
     comp = compare_runs(ref_a, ref_b)
+    for run_id in (comp.run_a, comp.run_b):
+        source = load_run_meta(run_id)["rejudge_of"]
+        if source:
+            console.print(
+                f"[dim]{run_id} is a rejudge of {source}: same answers, re-graded by the "
+                "judge only[/dim]"
+            )
     show_cost = comp.judge_cost_a is not None or comp.judge_cost_b is not None
     table = Table(title=f"evalx compare: {comp.run_a} -> {comp.run_b}")
     table.add_column("case", style="cyan")
@@ -519,6 +529,171 @@ def run(
 
     if failed:
         raise typer.Exit(code=1)
+
+
+@app.command()
+def noise(
+    ref: str = typer.Argument("latest", help="A run made with --repeats: id, prefix, 'latest'."),
+    percentile: float = typer.Option(
+        50.0, help="Which percentile of the moving cases' spreads counts as normal wobble."
+    ),
+    multiplier: float = typer.Option(
+        2.5, help="Suggested bar = normal wobble × this, rounded up to 0.05."
+    ),
+) -> None:
+    """How much a run wobbles between identical attempts, and a suggested bar."""
+    try:
+        rep = noise_report(ref, pct=percentile, multiplier=multiplier)
+    except (StoreError, NoiseError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    meta = load_run_meta(rep.run_id)
+    kind = f" · rejudge of {meta['rejudge_of']} (judge only)" if meta["rejudge_of"] else ""
+    console.print(
+        f"Run [cyan]{rep.run_id}[/cyan] · {rep.n_cases} cases × {rep.attempts} attempts{kind}"
+    )
+    if rep.attempts < 3:
+        console.print(
+            f"[yellow]note: only {rep.attempts} attempts per case; 3 or more "
+            "gives a more reliable estimate[/yellow]"
+        )
+
+    table = Table(title="spread between identical attempts", show_edge=False)
+    table.add_column("spread")
+    table.add_column("cases", justify="right")
+    table.add_column("")
+    top = max((n for _, n in rep.histogram), default=0) or 1
+    for label, n in rep.histogram:
+        table.add_row(label, str(n), "█" * max(1 if n else 0, round(30 * n / top)))
+    console.print(table)
+
+    console.print(
+        f"\n{rep.n_moved} of {rep.n_cases} cases moved at all. Normal wobble "
+        f"(p{rep.percentile:g} of those): [bold]{rep.normal_wobble:.2f}[/bold]"
+    )
+    console.print(
+        f"Suggested bar: [bold green]{rep.suggested_bar:.2f}[/bold green]   "
+        f"→ --fail-on-regression {rep.suggested_bar:g}"
+    )
+    if rep.suggested_bar >= 0.5:
+        console.print(
+            "[yellow]note: that bar is high; the gate would miss smaller regressions. "
+            "Reduce the app's randomness (temperature, retrieval) or use more --repeats.[/yellow]"
+        )
+    if rep.noisy:
+        console.print("\n[yellow]Noisy (move more than the bar between identical attempts):[/yellow]")
+        for c in rep.noisy:
+            attempts = ", ".join(f"{a:.2f}" for a in c.attempts)
+            console.print(f"  [yellow]{c.case_id}  {c.spread:.2f}[/yellow]   attempts {attempts}")
+        console.print(
+            'Fix these in the app, or expect "may be model noise" on their regressions.'
+        )
+    else:
+        console.print("[green]No case moves more than the bar.[/green]")
+
+
+@app.command()
+def rejudge(
+    ref: str = typer.Argument(..., help="The run whose stored answers to re-grade."),
+    repeats: int = typer.Option(3, min=1, help="Times the judge grades each answer."),
+    judge_model: str = typer.Option(
+        None,
+        help="Judge to use. Defaults to the run's own judge; another model shows how "
+        "a different judge grades the same answers.",
+    ),
+    judge_temperature: float = typer.Option(None, help="Temperature for the judge."),
+    suite: str = typer.Option(
+        None, help="Dataset to read rubrics from, if it moved since the run."
+    ),
+    workers: int = typer.Option(1, min=1, help="Judge calls to run at once."),
+    no_save: bool = typer.Option(False, help="Don't save the re-graded run."),
+) -> None:
+    """Re-grade a run's stored answers with the judge only (the app isn't called)."""
+    try:
+        run_id = resolve_run_id(ref)
+        meta = load_run_meta(run_id)
+    except StoreError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    model = judge_model or meta["judge_model"]
+    if not model:
+        console.print(
+            f"[red]run {run_id} wasn't judged, so there's no judge to reuse: "
+            "pass --judge-model[/red]"
+        )
+        raise typer.Exit(code=2)
+    judge = LLMJudge(model, temperature=judge_temperature)
+    try:
+        out = rejudge_run(
+            run_id, judge, repeats=repeats, workers=workers, suite=suite, judge_model=model
+        )
+    except (RejudgeError, StoreError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        f"Re-grading stored answers of [cyan]{run_id}[/cyan] with [cyan]{model}[/cyan] · "
+        f"{len(out.rejudged)} case(s) with a rubric × {repeats} · app not called"
+    )
+    table = Table(title=f"evalx rejudge: {run_id}")
+    table.add_column("case", style="cyan")
+    table.add_column("judge (original)", justify="right")
+    table.add_column("judge now", justify="right")
+    table.add_column("spread", justify="right")
+    for c in out.rejudged:
+        now = sum(c.judge_scores) / len(c.judge_scores) if c.judge_scores else None
+        table.add_row(
+            c.case_id,
+            "–" if c.original_judge is None else f"{c.original_judge:.2f}",
+            "–" if now is None else f"{now:.2f}",
+            "–" if c.spread is None else f"{c.spread:.2f}",
+        )
+    console.print(table)
+
+    spreads = [c.spread for c in out.rejudged if c.spread is not None]
+    if spreads:
+        p90 = percentile(spreads, 90)
+        console.print(
+            f"Judge noise: 90% of cases move at most [bold]{p90:.2f}[/bold] · "
+            f"max {max(spreads):.2f}"
+        )
+    elif repeats < 2:
+        console.print("[yellow]--repeats 1 shows no judge noise; use 3.[/yellow]")
+    regraded_ids = {c.case_id for c in out.rejudged}
+    for r in out.result.results:
+        if r.case_id in regraded_ids and r.error:
+            console.print(f"[red]ERROR {r.case_id}: {r.error}[/red]")
+    if out.source_repeats > 1:
+        console.print(
+            f"[yellow]note: {run_id} used --repeats {out.source_repeats}. Its judge score is a "
+            "mean over different answers, while the re-grade uses the one stored answer "
+            "(the lowest-scoring attempt). Compare the spreads, not the two judge columns."
+            "[/yellow]"
+        )
+    if out.question_changed:
+        console.print(
+            "[yellow]note: the dataset question changed since the run for: "
+            f"{', '.join(out.question_changed)}[/yellow]"
+        )
+    by_reason: dict[str, list[str]] = {}
+    for s in out.skipped:
+        by_reason.setdefault(s.reason, []).append(s.case_id)
+    for reason, ids in by_reason.items():
+        console.print(f"[dim]skipped {len(ids)} ({reason})[/dim]")
+
+    tokens, cost = run_judge_usage(out.result)
+    if tokens is not None or cost is not None:
+        console.print(
+            f"Judge usage: {tokens or 0:,} tokens, "
+            f"{_usd(cost) if cost is not None else 'cost unknown'}"
+        )
+    if not no_save:
+        new_id = save_run(out.result, model, rejudge_of=run_id)
+        console.print(f"Run saved: [cyan]{new_id}[/cyan] (rejudge of {run_id})")
+        console.print(
+            f"Next: [cyan]evalx noise {new_id}[/cyan] for the judge-only wobble, "
+            f"[cyan]evalx compare {run_id} {new_id}[/cyan] for the score changes."
+        )
 
 
 if __name__ == "__main__":

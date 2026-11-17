@@ -411,3 +411,24 @@ def test_cli_dashboard_without_streamlit_names_the_extra(monkeypatch):
     res = CliRunner().invoke(app, ["dashboard"])
     assert res.exit_code == 1
     assert 'pip install "evalx-gate[dashboard]"' in res.output
+
+
+def test_exact_run_id_wins_over_a_longer_id_it_prefixes(isolated_store, monkeypatch):
+    # Two runs in the same second: ids X and X-2, where X is a prefix of X-2.
+    import datetime as dt
+
+    fixed = dt.datetime(2026, 11, 17, 4, 48, 33, tzinfo=dt.UTC)
+
+    class FrozenDatetime(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed
+
+    monkeypatch.setattr(store, "datetime", FrozenDatetime)
+    first = store.save_run(_fake_result([1.0]))
+    second = store.save_run(_fake_result([0.5]))
+    assert second == f"{first}-2"
+    assert store.resolve_run_id(first) == first
+    assert store.resolve_run_id(second) == second
+    with pytest.raises(store.StoreError, match="ambiguous"):
+        store.resolve_run_id(first[:-2])  # a real prefix of both is still ambiguous
