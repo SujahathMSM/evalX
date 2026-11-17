@@ -13,12 +13,15 @@ the command is `evalx` and the import is `import evalx`.
 
 - `evalx noise [RUN]`: reads a saved `--repeats` run, shows how far cases
   move between identical attempts, and suggests a `--fail-on-regression`
-  bar (2.5× the median spread of the cases that moved, rounded up to 0.05,
-  between 0.05 and 1.0) plus the noisy cases above it.
+  bar plus the noisy cases above it. Normal wobble is the largest spread
+  after setting aside the noisiest 5% of cases (at least one); the bar is
+  2.5× that, rounded up to 0.05, between 0.05 and 1.0.
 - `evalx rejudge RUN`: re-grades a run's stored answers with the judge only,
   N times, without calling the app, to measure judge noise or try another
   judge model on the same answers. Saved as a new run linked to the
-  original (`runs.rejudge_of`); `evalx compare` names it.
+  original (`runs.rejudge_of`); `evalx compare` names it, warns when the
+  source was a `--repeats` run (its scores are means over different
+  answers) and explains that a rejudge's wall time is judge calls only.
 - `examples/tiny_rag`: a toy RAG app showing how a target plugs in. (#13)
 
 ### Changed

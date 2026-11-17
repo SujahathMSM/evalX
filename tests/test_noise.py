@@ -71,17 +71,43 @@ def test_histogram_buckets():
 
 def test_aerointel_shape_gives_the_hand_picked_bar():
     rep = analyse(AEROINTEL_SHAPE, "r")
-    assert (rep.n_cases, rep.n_moved, rep.attempts) == (67, 6, 3)
+    assert (rep.n_cases, rep.n_moved, rep.attempts, rep.n_set_aside) == (67, 6, 3, 3)
     assert rep.normal_wobble == pytest.approx(0.07)
     assert rep.suggested_bar == 0.2
     assert [c.case_id for c in rep.noisy] == ["bolts", "fabric"]
     assert rep.noisy[0].attempts == [0.17, 0.50, 0.50]
 
 
-def test_stable_cases_do_not_drown_the_wobble():
-    # Over all 67 cases the median spread is 0; only movers count.
-    rep = analyse(AEROINTEL_SHAPE, "r", pct=50)
-    assert rep.normal_wobble > 0
+def test_aerointel_run_where_only_the_outliers_moved():
+    # Run 20261103-222237: 65 cases never moved, 2 moved 0.33. The outliers
+    # must not define "normal": a low bar, with both flagged.
+    shape = {f"stable-{i}": [1.0, 1.0, 1.0] for i in range(65)}
+    shape.update({"bolts": [0.17, 0.50, 0.50], "fabric": [0.17, 0.17, 0.50]})
+    rep = analyse(shape, "r")
+    assert (rep.n_moved, rep.n_set_aside, rep.normal_wobble) == (2, 3, 0.0)
+    assert rep.suggested_bar == 0.05
+    assert [c.case_id for c in rep.noisy] == ["bolts", "fabric"]
+
+
+def test_judge_wobble_stays_inside_the_bar():
+    rep = analyse(AEROINTEL_SHAPE, "r")
+    assert rep.normal_wobble == pytest.approx(0.07)
+    assert not {"safety-wire", "titanium", "manufacturer", "plastics"} & {
+        c.case_id for c in rep.noisy
+    }
+
+
+def test_small_suite_flags_its_one_outlier():
+    shape = {"odd": [0.0, 0.33]} | {f"c{i}": [1.0, 1.0] for i in range(5)}
+    rep = analyse(shape)
+    assert rep.n_set_aside == 1
+    assert [c.case_id for c in rep.noisy] == ["odd"]
+
+
+def test_single_case_suite_keeps_its_case():
+    rep = analyse({"only": [0.0, 0.2]})
+    assert rep.n_set_aside == 0
+    assert rep.normal_wobble == pytest.approx(0.2)
 
 
 def test_deterministic_app_gets_the_floor():
@@ -106,7 +132,9 @@ def test_one_attempt_is_refused():
         analyse({"a": [1.0], "b": [0.5]}, "r1")
 
 
-@pytest.mark.parametrize(("kwargs", "msg"), [({"pct": 0}, "percentile"), ({"multiplier": 0}, "multiplier")])
+@pytest.mark.parametrize(
+    ("kwargs", "msg"), [({"trim": 0.5}, "trim"), ({"trim": -0.1}, "trim"), ({"multiplier": 0}, "multiplier")]
+)
 def test_bad_parameters(kwargs, msg):
     with pytest.raises(NoiseError, match=msg):
         analyse(AEROINTEL_SHAPE, **kwargs)

@@ -245,3 +245,16 @@ def test_cli_compare_names_the_rejudge(isolated_store):
     # Judge 1.0 -> 0.5 on the rubric cases moves only those two scores.
     comp = store.compare_runs(source, new_id)
     assert comp.regressed == 2 and comp.unchanged == 4
+
+
+def test_cli_compare_explains_a_rejudge_of_a_repeats_run(isolated_store):
+    source = _judged_source(repeats=2)
+    out = rejudge_run(source, FixedJudge(1.0), repeats=1)
+    new_id = store.save_run(out.result, "m", rejudge_of=source)
+    res = CliRunner().invoke(app, ["compare", source, new_id], env={"COLUMNS": "250"})
+    assert res.exit_code == 0, res.output
+    out_text = _flat(res.output)
+    assert f"{source} used --repeats 2" in out_text
+    assert f"evalx noise {new_id} for judge-only wobble" in out_text
+    assert "its wall time is judge calls only" in out_text
+    assert "different --workers" not in out_text

@@ -10,7 +10,7 @@
   <a href="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml"><img src="https://github.com/SujahathMSM/evalX/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT">
-  <img src="https://img.shields.io/badge/tests-291_passing-brightgreen.svg" alt="Tests: 291 passing">
+  <img src="https://img.shields.io/badge/tests-296_passing-brightgreen.svg" alt="Tests: 296 passing">
 </p>
 
 <p align="center">
@@ -74,7 +74,7 @@ evalX has graded two real systems (plus its own deterministic demo):
 | Ollama `qwen3:4b-instruct` (local) | 6 general cases via the generic adapter | **mean 0.833**, total cost $0 |
 | Demo app (deterministic, deliberately mediocre) | 6 cases | 0.500 by design — the CI gate's calibration fixture |
 
-291 tests (including end-to-end), `ruff` clean, CI green on every push.
+296 tests (including end-to-end), `ruff` clean, CI green on every push.
 
 ## Install
 
@@ -161,7 +161,8 @@ evalx noise latest
 ```
 
 ```
-6 of 67 cases moved at all. Normal wobble (p50 of those): 0.07
+6 of 67 cases moved at all.
+Normal wobble (largest spread after setting aside the noisiest 3 cases): 0.07
 Suggested bar: 0.20   → --fail-on-regression 0.2
 
 Noisy (move more than the bar between identical attempts):
@@ -169,11 +170,12 @@ Noisy (move more than the bar between identical attempts):
   user-fabric-inspect-repair  0.33   attempts 0.17, 0.17, 0.50
 ```
 
-*Normal wobble* is the median spread of the cases that moved at all; cases
-that never move are left out so a mostly stable app doesn't get a bar of 0.
+*Normal wobble* is the largest spread left after setting aside the noisiest
+5% of cases (at least one), so a couple of outliers can't define "normal"
+while ordinary wobble, like small judge variation, stays inside the bar.
 The suggested bar is 2.5× that, rounded up to 0.05, between 0.05 and 1.0
-(`--percentile` and `--multiplier` change the rule). *Noisy* cases move more
-than the bar: fix them in the app rather than raising the bar for everyone.
+(`--trim` and `--multiplier` change the rule). *Noisy* cases move more than
+the bar: fix them in the app rather than raising the bar for everyone.
 It needs a run with at least 2 attempts per case (3 or more is better).
 Measure again whenever the app's model or the judge changes.
 
@@ -301,7 +303,7 @@ silently scoring 0.
 | `evalx baseline pin REF` | Pin a stored run as a named baseline (`--name`, default `stable`) | `--allow-errors` (required if the run contains error cases) |
 | `evalx baseline list` | List pinned baselines | — |
 | `evalx dashboard` | Launch the Streamlit dashboard | `--port` (default 8501) |
-| `evalx noise [RUN]` | Wobble between identical attempts of a `--repeats` run, and a suggested `--fail-on-regression` bar | `--percentile` (default 50), `--multiplier` (default 2.5) |
+| `evalx noise [RUN]` | Wobble between identical attempts of a `--repeats` run, and a suggested `--fail-on-regression` bar | `--trim` (default 0.05), `--multiplier` (default 2.5) |
 | `evalx rejudge RUN` | Re-grade a run's stored answers with the judge only (the app isn't called) | `--repeats` (default 3), `--judge-model`, `--suite`, `--workers`, `--no-save` |
 | `evalx version` | Print the version | — |
 
@@ -486,7 +488,7 @@ the top of this README.*
 ```bash
 pip install -e ".[dev,e2e]"           # pytest, ruff, streamlit, pandas, playwright
 python -m playwright install chromium # browser for the dashboard E2E test
-python -m pytest                      # 291 tests
+python -m pytest                      # 296 tests
 ruff check .
 ```
 

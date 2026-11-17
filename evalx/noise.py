@@ -4,12 +4,17 @@ A run made with ``--repeats N`` stores every attempt's score per case. The
 spread of a case (highest attempt minus lowest) is how far it moved between
 identical attempts. From the spreads of a whole run:
 
-- **normal wobble** is the typical spread of the cases that moved at all
-  (default: their median, the 50th percentile). Cases that never move are
-  left out: in a mostly stable app they are the majority, and counting them
-  would put the wobble at 0 and flag ordinary judge variation as noise. A
-  percentile rather than the maximum, so a couple of noisy cases cannot
-  inflate it. When no case moved, the wobble is 0.
+- **normal wobble** is the largest spread left after setting aside the
+  noisiest cases: the top 5% by spread (``trim``), and always at least one.
+  Setting the outliers aside is what keeps a couple of noisy cases from
+  defining "normal"; taking the maximum of the rest keeps ordinary wobble,
+  such as small judge variation, inside the bar.
+
+  Two simpler rules were tried on real AeroIntel runs and each failed one:
+  a percentile over every case is 0 when most cases never move, which
+  flags ordinary judge wobble as noise; the median of the cases that moved
+  is the outliers' own size when they are the only cases that moved, which
+  suggests a bar so high nothing is ever flagged.
 - **suggested bar** is the normal wobble times a multiplier (default 2.5),
   rounded up to the next 0.05, never below 0.05 and never above 1.0. Use it
   as ``--fail-on-regression``: ordinary wobble then never fails the gate.
@@ -53,7 +58,8 @@ class NoiseReport(BaseModel):
     n_cases: int
     n_moved: int  # cases whose attempts were not all equal
     attempts: int  # attempts per case (the run's --repeats)
-    percentile: float
+    trim: float
+    n_set_aside: int  # the noisiest cases left out of the normal wobble
     multiplier: float
     normal_wobble: float
     suggested_bar: float
@@ -95,12 +101,12 @@ def histogram(spreads: list[float]) -> list[tuple[str, int]]:
 def analyse(
     attempt_scores: dict[str, list[float]],
     run_id: str = "",
-    pct: float = 50.0,
+    trim: float = 0.05,
     multiplier: float = 2.5,
 ) -> NoiseReport:
     """Noise report from each case's attempt scores (cases with 2+ attempts)."""
-    if not 0 < pct <= 100:
-        raise NoiseError(f"percentile must be in (0, 100], got {pct}")
+    if not 0 <= trim < 0.5:
+        raise NoiseError(f"trim must be in [0, 0.5), got {trim}")
     if multiplier <= 0:
         raise NoiseError(f"multiplier must be positive, got {multiplier}")
     usable = {cid: scores for cid, scores in attempt_scores.items() if len(scores) >= 2}
@@ -111,7 +117,10 @@ def analyse(
         )
     spreads = {cid: round(max(s) - min(s), 6) for cid, s in usable.items()}
     moved = [s for s in spreads.values() if s > 1e-9]
-    normal = percentile(moved, pct) if moved else 0.0
+    ordered = sorted(spreads.values())
+    # Set aside the noisiest trim share, at least one case, but keep one.
+    set_aside = min(max(1, math.floor(len(ordered) * trim)), len(ordered) - 1)
+    normal = ordered[len(ordered) - set_aside - 1]
     bar = suggest_bar(normal, multiplier)
     noisy = sorted(
         (
@@ -126,7 +135,8 @@ def analyse(
         n_cases=len(usable),
         n_moved=len(moved),
         attempts=min(len(s) for s in usable.values()),
-        percentile=pct,
+        trim=trim,
+        n_set_aside=set_aside,
         multiplier=multiplier,
         normal_wobble=normal,
         suggested_bar=bar,
@@ -136,7 +146,7 @@ def analyse(
     )
 
 
-def noise_report(ref: str, pct: float = 50.0, multiplier: float = 2.5, path=None) -> NoiseReport:
+def noise_report(ref: str, trim: float = 0.05, multiplier: float = 2.5, path=None) -> NoiseReport:
     """Noise report for a stored run ('latest', 'latest-N', an id or prefix)."""
     run_id = resolve_run_id(ref, path)
     load_run_meta(run_id, path)  # raises StoreError for an unknown id
@@ -145,4 +155,4 @@ def noise_report(ref: str, pct: float = 50.0, multiplier: float = 2.5, path=None
         for d in load_case_details(run_id, path)
         if d["attempt_scores"]
     }
-    return analyse(attempt_scores, run_id=run_id, pct=pct, multiplier=multiplier)
+    return analyse(attempt_scores, run_id=run_id, trim=trim, multiplier=multiplier)

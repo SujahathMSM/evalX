@@ -182,12 +182,24 @@ def compare(
 ) -> None:
     """Compare two stored runs case by case."""
     comp = compare_runs(ref_a, ref_b)
+    involves_rejudge = False
     for run_id in (comp.run_a, comp.run_b):
         source = load_run_meta(run_id)["rejudge_of"]
-        if source:
+        if not source:
+            continue
+        involves_rejudge = True
+        console.print(
+            f"[dim]{run_id} is a rejudge of {source}: same answers, re-graded by the "
+            "judge only[/dim]"
+        )
+        source_meta = load_run_meta(source)
+        if (source_meta["repeats"] or 1) > 1:
             console.print(
-                f"[dim]{run_id} is a rejudge of {source}: same answers, re-graded by the "
-                "judge only[/dim]"
+                f"[yellow]note: {source} used --repeats {source_meta['repeats']}, so its case "
+                "scores are means over different answers, while the rejudge grades the one "
+                "stored answer (the lowest-scoring attempt). Score deltas on cases whose "
+                f"answers varied come from that, not from the judge: use "
+                f"evalx noise {run_id} for judge-only wobble.[/yellow]"
             )
     show_cost = comp.judge_cost_a is not None or comp.judge_cost_b is not None
     table = Table(title=f"evalx compare: {comp.run_a} -> {comp.run_b}")
@@ -233,7 +245,12 @@ def compare(
         f"{_pct_change(comp.duration_a, comp.duration_b)}"
         f" | workers {_count_cell(comp.workers_a)} -> {_count_cell(comp.workers_b)}"
     )
-    if (
+    if involves_rejudge:
+        console.print(
+            "[dim]note: a rejudge doesn't call the app, so its wall time is judge calls only "
+            "and its latency column is copied from the source run[/dim]"
+        )
+    elif (
         comp.workers_a is not None
         and comp.workers_b is not None
         and comp.workers_a != comp.workers_b
@@ -534,8 +551,10 @@ def run(
 @app.command()
 def noise(
     ref: str = typer.Argument("latest", help="A run made with --repeats: id, prefix, 'latest'."),
-    percentile: float = typer.Option(
-        50.0, help="Which percentile of the moving cases' spreads counts as normal wobble."
+    trim: float = typer.Option(
+        0.05,
+        help="Share of the noisiest cases to set aside (at least one) before "
+        "measuring normal wobble.",
     ),
     multiplier: float = typer.Option(
         2.5, help="Suggested bar = normal wobble × this, rounded up to 0.05."
@@ -543,7 +562,7 @@ def noise(
 ) -> None:
     """How much a run wobbles between identical attempts, and a suggested bar."""
     try:
-        rep = noise_report(ref, pct=percentile, multiplier=multiplier)
+        rep = noise_report(ref, trim=trim, multiplier=multiplier)
     except (StoreError, NoiseError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1) from exc
@@ -567,9 +586,10 @@ def noise(
         table.add_row(label, str(n), "█" * max(1 if n else 0, round(30 * n / top)))
     console.print(table)
 
+    console.print(f"\n{rep.n_moved} of {rep.n_cases} cases moved at all.")
     console.print(
-        f"\n{rep.n_moved} of {rep.n_cases} cases moved at all. Normal wobble "
-        f"(p{rep.percentile:g} of those): [bold]{rep.normal_wobble:.2f}[/bold]"
+        f"Normal wobble (largest spread after setting aside the noisiest {rep.n_set_aside} "
+        f"case{'' if rep.n_set_aside == 1 else 's'}): [bold]{rep.normal_wobble:.2f}[/bold]"
     )
     console.print(
         f"Suggested bar: [bold green]{rep.suggested_bar:.2f}[/bold green]   "
