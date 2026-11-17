@@ -7,7 +7,10 @@ All notable changes to evalX. The format follows
 evalX is published on PyPI as **`evalx-gate`** (`pip install evalx-gate`);
 the command is `evalx` and the import is `import evalx`.
 
-## [Unreleased]
+## [0.3.0] - 2026-11-17
+
+Noise tools: measure how much scores wobble, where to set the regression
+bar, and whether the wobble comes from the app or the judge.
 
 ### Added
 
@@ -15,13 +18,14 @@ the command is `evalx` and the import is `import evalx`.
   move between identical attempts, and suggests a `--fail-on-regression`
   bar plus the noisy cases above it. Normal wobble is the largest spread
   after setting aside the noisiest 5% of cases (at least one); the bar is
-  2.5× that, rounded up to 0.05, between 0.05 and 1.0.
+  2.5× that, rounded up to 0.05, between 0.05 and 1.0. (#14)
 - `evalx rejudge RUN`: re-grades a run's stored answers with the judge only,
   N times, without calling the app, to measure judge noise or try another
   judge model on the same answers. Saved as a new run linked to the
   original (`runs.rejudge_of`); `evalx compare` names it, warns when the
   source was a `--repeats` run (its scores are means over different
   answers) and explains that a rejudge's wall time is judge calls only.
+  (#14)
 - `examples/tiny_rag`: a toy RAG app showing how a target plugs in. (#13)
 
 ### Changed
@@ -33,7 +37,7 @@ the command is `evalx` and the import is `import evalx`.
 
 - A full run id that is also the prefix of another (two runs saved in the
   same second, `X` and `X-2`) was reported as ambiguous; an exact id now
-  always wins.
+  always wins. (#14)
 
 ## [0.2.0] - 2026-11-04
 
@@ -92,4 +96,5 @@ Initial development version, never published to PyPI.
 - Baselines and the per-case regression gate.
 - Adapters for AeroIntel and for any OpenAI-compatible endpoint.
 
+[0.3.0]: https://github.com/SujahathMSM/evalX/releases/tag/v0.3.0
 [0.2.0]: https://github.com/SujahathMSM/evalX/releases/tag/v0.2.0
