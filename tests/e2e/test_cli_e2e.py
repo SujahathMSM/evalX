@@ -290,3 +290,25 @@ def test_judge_cost_tracked_end_to_end(evalx_cli, fake_openai, suite, e2e_env):
     assert "Latency (mean per case):" in cmp.stdout
     assert "Judge cost: $0." in cmp.stdout  # A priced, B unknown
     assert "-> –" in cmp.stdout
+
+
+def test_rejudge_and_noise_end_to_end(evalx_cli, fake_openai, suite, e2e_env):
+    """Re-grade a judged run over real HTTP: only the judge is called again."""
+    fake_openai.answers = dict(GOOD_ANSWERS)
+    fake_openai.judge = _keyword_judge
+    judged = evalx_cli("run", "--suite", str(suite), "--target", TARGET, "--judge-model", JUDGE)
+    assert judged.returncode == 0, judged.stdout + judged.stderr
+    target_calls = len(fake_openai.target_calls())
+    judge_calls = len(fake_openai.judge_calls())
+
+    res = evalx_cli("rejudge", "latest", "--repeats", "2")
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert len(fake_openai.target_calls()) == target_calls  # the app is not called
+    assert len(fake_openai.judge_calls()) == judge_calls + 4  # e3, e4 × 2
+    assert "2 case(s) with a rubric × 2 · app not called" in res.stdout
+    assert "Judge noise: 90% of cases move at most 0.00" in res.stdout  # deterministic judge
+
+    noise = evalx_cli("noise", "latest")
+    assert noise.returncode == 0, noise.stdout + noise.stderr
+    assert "rejudge of" in noise.stdout
+    assert "Suggested bar: 0.05" in noise.stdout

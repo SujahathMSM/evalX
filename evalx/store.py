@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS runs (
     judge_cost_usd DOUBLE,
     duration_s DOUBLE,
     workers INTEGER,
-    repeats INTEGER
+    repeats INTEGER,
+    rejudge_of VARCHAR
 )
 """
 
@@ -84,6 +85,7 @@ _RUN_EXTRA_COLUMNS = (
     ("duration_s", "DOUBLE"),
     ("workers", "INTEGER"),
     ("repeats", "INTEGER"),
+    ("rejudge_of", "VARCHAR"),  # set on runs made by `evalx rejudge`
 )
 
 
@@ -136,7 +138,12 @@ def run_judge_usage(result: RunResult) -> tuple[int | None, float | None]:
     return (sum(tokens) if tokens else None, sum(costs) if costs else None)
 
 
-def save_run(result: RunResult, judge_model: str | None = None, path: Path | None = None) -> str:
+def save_run(
+    result: RunResult,
+    judge_model: str | None = None,
+    path: Path | None = None,
+    rejudge_of: str | None = None,
+) -> str:
     """Persist a run and its per-case scores. Returns the run id."""
     con = _connect(path)
     try:
@@ -146,7 +153,8 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
         con.execute(
             "INSERT INTO runs (run_id, suite, target, judge_model, mean_score, n_cases,"
             " created_at, n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s,"
-            " workers, repeats) VALUES (?, ?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?)",
+            " workers, repeats, rejudge_of)"
+            " VALUES (?, ?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 run_id,
                 result.suite,
@@ -161,6 +169,7 @@ def save_run(result: RunResult, judge_model: str | None = None, path: Path | Non
                 result.duration_s,
                 result.workers,
                 result.repeats,
+                rejudge_of,
             ],
         )
         con.executemany(
@@ -208,6 +217,7 @@ _RUN_META_COLUMNS = [
     "duration_s",
     "workers",
     "repeats",
+    "rejudge_of",
 ]
 
 
@@ -217,7 +227,8 @@ def list_runs(path: Path | None = None) -> list[dict]:
     try:
         rows = con.execute(
             "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
-            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers, repeats"
+            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers, repeats,"
+            " rejudge_of"
             " FROM runs ORDER BY created_at DESC"
         ).fetchall()
     finally:
@@ -242,6 +253,10 @@ def resolve_run_id(ref: str, path: Path | None = None) -> str:
         if n < 1 or n >= len(runs):
             raise StoreError(f"only {len(runs)} run(s) stored, asked for {ref!r}")
         return runs[n]["run_id"]
+    # An exact id wins: runs saved in the same second get ids like X and X-2,
+    # and X is also a prefix of X-2.
+    if any(r["run_id"] == ref for r in runs):
+        return ref
     matches = [r["run_id"] for r in runs if r["run_id"].startswith(ref)]
     if len(matches) == 1:
         return matches[0]
@@ -255,7 +270,8 @@ def load_run_meta(run_id: str, path: Path | None = None) -> dict:
     try:
         row = con.execute(
             "SELECT run_id, suite, target, judge_model, mean_score, n_cases, created_at,"
-            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers, repeats"
+            " n_errors, n_skipped, judge_tokens, judge_cost_usd, duration_s, workers, repeats,"
+            " rejudge_of"
             " FROM runs WHERE run_id = ?",
             [run_id],
         ).fetchone()

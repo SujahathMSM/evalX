@@ -6,7 +6,7 @@ from pathlib import Path
 
 from evalx.adapters import resolve_target
 from evalx.datasets import load_dataset
-from evalx.schemas import CaseResult, RunResult, TestCase
+from evalx.schemas import CaseResult, CheckScore, RunResult, TestCase
 from evalx.scorers import combine_checks, score_case_details
 
 
@@ -45,8 +45,25 @@ def _run_case(case: TestCase, answer_fn, judge) -> CaseResult:
     latency_ms = (time.perf_counter() - started) * 1000.0
     if not isinstance(answer, str):
         answer = "" if answer is None else str(answer)
+    return score_answer(case, answer, latency_ms, judge)
 
-    details = score_case_details(case, answer)
+
+def score_answer(
+    case: TestCase,
+    answer: str,
+    latency_ms: float,
+    judge,
+    details: list[CheckScore] | None = None,
+) -> CaseResult:
+    """Grade one answer: code checks, then the judge if the case has a rubric.
+
+    Never raises: a judge failure is recorded on the case, which scores 0.0.
+    ``details`` are precomputed check results; ``evalx rejudge`` passes the
+    stored ones so only the judge's verdict can change. When omitted the
+    case's checks are run on the answer.
+    """
+    if details is None:
+        details = score_case_details(case, answer)
     code_score = combine_checks(details)
 
     judge_score: float | None = None
